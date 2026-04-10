@@ -14,12 +14,15 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 $errorMessage = null;
 $opError = null;
 $ipError = null;
+$ipSourceError = null;
 $opResult = null;
 $ipResult = null;
+$ipSourceResult = null;
 $filters = [
     'view' => 'both',
     'page_op' => 1,
     'page_ip' => 1,
+    'page_ip_source' => 1,
     'page_size' => 25,
 ];
 
@@ -42,6 +45,12 @@ try {
         } catch (Throwable $e) {
             error_log('op_ip_patients IP: ' . $e->getMessage());
             $ipError = 'Inpatient query failed. Check column names in config.php.';
+        }
+        try {
+            $ipSourceResult = op_ip_run_ip_source_query($conn, $config, $filters);
+        } catch (Throwable $e) {
+            error_log('op_ip_patients IP source: ' . $e->getMessage());
+            $ipSourceError = 'IP source table query failed. Check table and filters in config.php.';
         }
     }
     $conn = null;
@@ -74,6 +83,9 @@ $g = static function (string $key, string $default = ''): string {
     <?php endif; ?>
     <?php if ($ipError !== null) : ?>
       <div class="banner error"><?php echo op_ip_h($ipError); ?></div>
+    <?php endif; ?>
+    <?php if ($ipSourceError !== null) : ?>
+      <div class="banner error"><?php echo op_ip_h($ipSourceError); ?></div>
     <?php endif; ?>
 
     <form class="banner" method="get" action="">
@@ -177,6 +189,17 @@ $g = static function (string $key, string $default = ''): string {
             'page_ip'
         );
     }
+    if ($ipSourceResult !== null) {
+        op_ip_render_table(
+            'Mast_IP_Admission (source table)',
+            $ipSourceResult['headers'],
+            $ipSourceResult['rows'],
+            $ipSourceResult['total'],
+            $filters['page_ip_source'],
+            $filters['page_size'],
+            'page_ip_source'
+        );
+    }
     ?>
 
     <p class="hint">
@@ -184,7 +207,8 @@ $g = static function (string $key, string $default = ''): string {
       PHP needs <strong>PDO</strong> with either
       <code>pdo_sqlsrv</code> (Microsoft PHP drivers) or <code>pdo_odbc</code> + <strong>ODBC Driver 17/18 for SQL Server</strong>
       (enable <code>extension=odbc</code> and <code>extension=pdo_odbc</code> in <code>php.ini</code>). If queries fail, fix column names
-      in config or run <code>discover_schema.php</code> on localhost.
+      in config or run <code>discover_schema.php</code> / <code><a href="table_columns.php">table_columns.php</a></code> on localhost.
+      For PHP-only create-token style search, open <code><a href="token_search.php">token_search.php</a></code>.
     </p>
   </div>
 </body>

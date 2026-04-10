@@ -8,6 +8,7 @@ import {
   endTreatment,
   getLiveQueue,
   getTokenDetail,
+  moveTokenToWaiting,
   startConsulting,
   startTreatment
 } from "../services/tokenService.js";
@@ -22,13 +23,8 @@ const branchSchema = z.object({
   new_department: z.string().min(1)
 });
 
-const endConsultSchema = z.object({
-  consult_note: z.string().optional().default(""),
-  next_department: z.string().optional().default("")
-});
-
-const startTreatmentSchema = z.object({
-  department: z.string().min(1)
+const startConsultSchema = z.object({
+  department: z.string().optional().default("")
 });
 
 const getTokenId = (req = {}) => String(req?.params?.id ?? "").trim();
@@ -40,24 +36,23 @@ export const createTokenHandler = asyncHandler(async (req, res) => {
 });
 
 export const startWaiting = asyncHandler(async (req, res) => {
-  const result = await getTokenDetail(getTokenId(req));
-  return sendSuccess(res, result, "Token already in waiting state");
+  const result = await moveTokenToWaiting(getTokenId(req));
+  return sendSuccess(res, result, "Moved token to waiting");
 });
 
 export const startConsult = asyncHandler(async (req, res) => {
-  const result = await startConsulting(getTokenId(req));
+  const input = startConsultSchema.parse(req.body ?? {});
+  const result = await startConsulting(getTokenId(req), input);
   return sendSuccess(res, result, "Consult started");
 });
 
 export const endConsult = asyncHandler(async (req, res) => {
-  const input = endConsultSchema.parse(req.body ?? {});
-  const result = await endConsulting(getTokenId(req), input);
+  const result = await endConsulting(getTokenId(req), {});
   return sendSuccess(res, result, "Consult ended");
 });
 
 export const startCare = asyncHandler(async (req, res) => {
-  const input = startTreatmentSchema.parse(req.body ?? {});
-  const result = await startTreatment(getTokenId(req), input);
+  const result = await startTreatment(getTokenId(req));
   return sendSuccess(res, result, "Treatment started");
 });
 

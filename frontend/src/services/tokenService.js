@@ -17,12 +17,12 @@ export const fetchTokenDetail = async (tokenId = "") => {
 
 export const startWaitingRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/start-waiting`);
-export const startConsultRequest = async (tokenId = "") =>
-  apiClient.post(`/tokens/${tokenId}/start-consult`);
-export const endConsultRequest = async (tokenId = "", payload = {}) =>
-  apiClient.post(`/tokens/${tokenId}/end-consult`, payload);
-export const startCareRequest = async (tokenId = "", payload = {}) =>
-  apiClient.post(`/tokens/${tokenId}/start-treatment`, payload);
+export const startConsultRequest = async (tokenId = "", payload = {}) =>
+  apiClient.post(`/tokens/${tokenId}/start-consult`, payload);
+export const endConsultRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/end-consult`);
+export const startCareRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/start-treatment`);
 export const endCareRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/end-treatment`);
 export const branchTokenRequest = async (tokenId = "", payload = {}) =>

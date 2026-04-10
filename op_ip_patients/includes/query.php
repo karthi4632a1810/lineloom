@@ -124,6 +124,46 @@ function op_ip_run_ip_query(PDO $conn, array $config, array $filters): array
 }
 
 /**
+ * Raw source table view for Mast_IP_Admission (ip.*), still honoring common IP filters.
+ *
+ * @return array{headers:array<string, string>, total:int, rows:list<array<string, mixed>>}
+ */
+function op_ip_run_ip_source_query(PDO $conn, array $config, array $filters): array
+{
+    $q = $config['queries'];
+    $sortKey = op_ip_whitelist_sort($filters['sort_ip'], $config['ip_sort_whitelist'] ?? [], 'ip.dIP_dt DESC');
+    $where = ['1 = 1'];
+    $params = [];
+    op_ip_append_common_filters($q, $filters, $where, $params);
+    op_ip_append_date_range($q['ip_date_column'] ?? 'ip.dIP_dt', $filters['ip_from'], $filters['ip_to'], $where, $params);
+    if ($filters['ward'] !== '') {
+        $where[] = ($q['ip_ward_column'] ?? 'ip.iDept_id') . ' = ?';
+        $params[] = $filters['ward'];
+    }
+    $fromSql = $q['ip_reg'] . ' ip INNER JOIN ' . $q['patient_master'] . ' pm ON ' . $q['ip_join_condition'];
+    $countSql = 'SELECT COUNT(*) AS cnt FROM ' . $fromSql . ' WHERE ' . implode(' AND ', $where);
+    $total = op_ip_scalar_int($conn, $countSql, $params);
+
+    $page = max(1, (int) ($filters['page_ip_source'] ?? 1));
+    $pageSize = max(1, (int) ($filters['page_size'] ?? 25));
+    $offset = max(0, ($page - 1) * $pageSize);
+
+    $sql = 'SELECT ip.* FROM ' . $fromSql
+        . ' WHERE ' . implode(' AND ', $where)
+        . ' ORDER BY ' . $sortKey
+        . ' OFFSET ' . $offset . ' ROWS FETCH NEXT ' . $pageSize . ' ROWS ONLY';
+    $rows = op_ip_fetch_all($conn, $sql, $params);
+
+    $headers = [];
+    if ($rows !== []) {
+        foreach (array_keys($rows[0]) as $key) {
+            $headers[(string) $key] = (string) $key;
+        }
+    }
+    return ['headers' => $headers, 'total' => $total, 'rows' => $rows];
+}
+
+/**
  * @param list<string> $where
  * @param list<mixed> $params
  */

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { fetchDashboardSummary, fetchDashboardTokens } from "../services/dashboardService";
 import {
   endCareRequest,
   endConsultRequest,
+  startWaitingRequest,
   startCareRequest,
   startConsultRequest
 } from "../services/tokenService";
@@ -38,17 +40,17 @@ const formatDateTime = (value = null) => {
 };
 
 const formatMinutes = (value = null) => (value == null ? "-" : `${value} min`);
+const normalizeTokenId = (value = "") => String(value ?? "").replace(/^\/+|\/+$/g, "");
 
 export const DashboardPage = () => {
+  const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState(() => getTodayDefaultFilters());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedTokenId, setSelectedTokenId] = useState("");
-  const [consultNote, setConsultNote] = useState("");
-  const [nextDepartment, setNextDepartment] = useState("");
-  const [treatmentDepartment, setTreatmentDepartment] = useState("");
+  const [consultStartModal, setConsultStartModal] = useState({ tokenId: "", department: "" });
+  const [confirmAction, setConfirmAction] = useState({ tokenId: "", action: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const departmentOptions = useMemo(
@@ -87,11 +89,31 @@ export const DashboardPage = () => {
     await loadDashboard();
   };
 
-  const handleStartConsulting = async (tokenId = "") => {
+  const openConsultStartModal = (row = null) => {
+    setConsultStartModal({
+      tokenId: String(row?.token_id ?? ""),
+      department: String(row?.department ?? "")
+    });
+  };
+
+  const openConfirmAction = (tokenId = "", action = "") => {
+    setConfirmAction({ tokenId, action });
+  };
+
+  const closeConsultStartModal = () => setConsultStartModal({ tokenId: "", department: "" });
+  const closeConfirmAction = () => setConfirmAction({ tokenId: "", action: "" });
+
+  const handleStartConsulting = async () => {
+    if (!consultStartModal.tokenId) {
+      return;
+    }
     setIsSubmitting(true);
     setError("");
     try {
-      await startConsultRequest(tokenId);
+      await startConsultRequest(consultStartModal.tokenId, {
+        department: consultStartModal.department
+      });
+      closeConsultStartModal();
       await loadDashboard();
     } catch (actionError) {
       setError(actionError?.message ?? "Unable to start consulting");
@@ -100,54 +122,28 @@ export const DashboardPage = () => {
     }
   };
 
-  const handleEndConsulting = async () => {
-    if (!selectedTokenId) {
+  const handleConfirmAction = async () => {
+    const tokenId = String(confirmAction.tokenId ?? "");
+    const action = String(confirmAction.action ?? "");
+    if (!tokenId || !action) {
       return;
     }
     setIsSubmitting(true);
     setError("");
     try {
-      await endConsultRequest(selectedTokenId, {
-        consult_note: consultNote,
-        next_department: nextDepartment
-      });
-      setSelectedTokenId("");
-      setConsultNote("");
-      setNextDepartment("");
+      if (action === "end_consult") {
+        await endConsultRequest(tokenId);
+      } else if (action === "start_treatment") {
+        await startCareRequest(tokenId);
+      } else if (action === "end_treatment") {
+        await endCareRequest(tokenId);
+      } else if (action === "revert_waiting") {
+        await startWaitingRequest(tokenId);
+      }
+      closeConfirmAction();
       await loadDashboard();
     } catch (actionError) {
-      setError(actionError?.message ?? "Unable to end consulting");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleStartTreatment = async (tokenId = "") => {
-    if (!treatmentDepartment) {
-      setError("Please select treatment department");
-      return;
-    }
-    setIsSubmitting(true);
-    setError("");
-    try {
-      await startCareRequest(tokenId, { department: treatmentDepartment });
-      setTreatmentDepartment("");
-      await loadDashboard();
-    } catch (actionError) {
-      setError(actionError?.message ?? "Unable to start treatment");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleEndTreatment = async (tokenId = "") => {
-    setIsSubmitting(true);
-    setError("");
-    try {
-      await endCareRequest(tokenId);
-      await loadDashboard();
-    } catch (actionError) {
-      setError(actionError?.message ?? "Unable to end treatment");
+      setError(actionError?.message ?? "Unable to update token state");
     } finally {
       setIsSubmitting(false);
     }
@@ -233,7 +229,29 @@ export const DashboardPage = () => {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.token_id}>
+                <tr
+                  key={row.token_id}
+                  className="clickable-row"
+                  onClick={() => {
+                    const cleanId = normalizeTokenId(row.token_id);
+                    if (!cleanId) {
+                      return;
+                    }
+                    navigate(`/tokens/${cleanId}`);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      const cleanId = normalizeTokenId(row.token_id);
+                      if (!cleanId) {
+                        return;
+                      }
+                      navigate(`/tokens/${cleanId}`);
+                    }
+                  }}
+                >
                   <td>{row.patient_id}</td>
                   <td>{row.name}</td>
                   <td>{row.visit_id}</td>
@@ -277,11 +295,11 @@ export const DashboardPage = () => {
                       {row.status}
                     </span>
                   </td>
-                  <td>
-                    <div className="action-group">
+                  <td onClick={(event) => event.stopPropagation()}>
+                    <div className="action-group" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={() => handleStartConsulting(row.token_id)}
+                        onClick={() => openConsultStartModal(row)}
                         disabled={isSubmitting || row.status !== "WAITING"}
                         title="Start Consulting"
                         aria-label="Start Consulting"
@@ -290,7 +308,7 @@ export const DashboardPage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelectedTokenId(row.token_id)}
+                        onClick={() => openConfirmAction(row.token_id, "end_consult")}
                         disabled={isSubmitting || row.status !== "CONSULTING"}
                         title="End Consulting"
                         aria-label="End Consulting"
@@ -299,7 +317,7 @@ export const DashboardPage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleStartTreatment(row.token_id)}
+                        onClick={() => openConfirmAction(row.token_id, "start_treatment")}
                         disabled={isSubmitting || row.status === "COMPLETED"}
                         title="Start Treatment"
                         aria-label="Start Treatment"
@@ -308,12 +326,21 @@ export const DashboardPage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleEndTreatment(row.token_id)}
+                        onClick={() => openConfirmAction(row.token_id, "end_treatment")}
                         disabled={isSubmitting || row.status !== "IN_TREATMENT"}
                         title="End Treatment"
                         aria-label="End Treatment"
                       >
                         <span className="action-icon">ET</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openConfirmAction(row.token_id, "revert_waiting")}
+                        disabled={isSubmitting}
+                        title="Move back to waiting"
+                        aria-label="Move back to waiting"
+                      >
+                        <span className="action-icon">RW</span>
                       </button>
                     </div>
                   </td>
@@ -324,41 +351,69 @@ export const DashboardPage = () => {
         </article>
       ) : null}
 
-      {selectedTokenId ? (
+      {consultStartModal.tokenId ? (
         <section className="modal-overlay">
-          <article className="modal-card">
-            <h3>End Consulting</h3>
-            <input
-              placeholder="Next department (ENT, Cardiology...)"
-              value={nextDepartment}
-              onChange={(event) => setNextDepartment(event.target.value)}
-            />
-            <textarea
-              placeholder="Consultation note (optional)"
-              value={consultNote}
-              onChange={(event) => setConsultNote(event.target.value)}
-            />
-            <div className="action-group">
-              <button type="button" onClick={handleEndConsulting} disabled={isSubmitting}>
-                Save and End
-              </button>
-              <button type="button" onClick={() => setSelectedTokenId("")}>
-                Cancel
-              </button>
+          <article className="modal-card consult-modal">
+            <div className="consult-modal-header">
+              <h3>Start Consulting</h3>
+            </div>
+            <div className="consult-modal-form">
+              <label htmlFor="consult_department">Select department</label>
+              <select
+                id="consult_department"
+                value={consultStartModal.department}
+                onChange={(event) =>
+                  setConsultStartModal((prev) => ({ ...prev, department: event.target.value }))
+                }
+              >
+                <option value="">Select department</option>
+                {departmentOptions.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+              <div className="consult-modal-actions">
+                <button type="button" onClick={handleStartConsulting} disabled={isSubmitting}>
+                  Yes, Start
+                </button>
+                <button type="button" className="btn-secondary" onClick={closeConsultStartModal}>
+                  Cancel
+                </button>
+              </div>
             </div>
           </article>
         </section>
       ) : null}
 
-      <article className="card">
-        <h4>Start Treatment Department</h4>
-        <input
-          type="text"
-          placeholder="Enter department before clicking start treatment"
-          value={treatmentDepartment}
-          onChange={(event) => setTreatmentDepartment(event.target.value)}
-        />
-      </article>
+      {confirmAction.tokenId ? (
+        <section className="modal-overlay">
+          <article className="modal-card consult-modal">
+            <div className="consult-modal-header">
+              <h3>Confirm Action</h3>
+            </div>
+            <div className="consult-modal-form">
+              <p className="confirm-text">
+                {confirmAction.action === "end_consult"
+                  ? "Are you sure you want to end consulting?"
+                  : confirmAction.action === "start_treatment"
+                    ? "Are you sure you want to start treatment?"
+                    : confirmAction.action === "end_treatment"
+                      ? "Are you sure you want to end treatment?"
+                      : "Are you sure you want to move this token back to waiting?"}
+              </p>
+              <div className="consult-modal-actions">
+                <button type="button" onClick={handleConfirmAction} disabled={isSubmitting}>
+                  Yes, Confirm
+                </button>
+                <button type="button" className="btn-secondary" onClick={closeConfirmAction}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </article>
+        </section>
+      ) : null}
     </section>
   );
 };

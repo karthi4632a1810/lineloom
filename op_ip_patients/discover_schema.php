@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'bootstrap.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'db.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'schema.php';
 
 header('Content-Type: text/plain; charset=utf-8');
 
@@ -37,11 +38,7 @@ try {
         }
         [$schema, $name] = $pair;
         echo "=== {$schema}.{$name} ===\n";
-        $sql = 'SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH '
-            . 'FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION';
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$schema, $name]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rows = op_ip_fetch_columns($pdo, $schema, $name);
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
@@ -49,7 +46,7 @@ try {
             $cn = $row['COLUMN_NAME'] ?? '';
             $dt = $row['DATA_TYPE'] ?? '';
             $ml = $row['CHARACTER_MAXIMUM_LENGTH'] ?? '';
-            echo "{$cn}\t{$dt}\t{$ml}\n";
+            echo "{$cn}\t{$dt}\t" . (string) $ml . "\n";
         }
         echo "\n";
     }
@@ -57,19 +54,4 @@ try {
     http_response_code(500);
     error_log('discover_schema: ' . $e->getMessage());
     echo 'Error. Check logs.';
-}
-
-/**
- * @return array{0: string, 1: string}
- */
-function op_ip_parse_qualified(string $qualified): array
-{
-    $q = trim($qualified);
-    if (preg_match('/\[([^\]]+)\]\s*\.\s*\[([^\]]+)\]/', $q, $m)) {
-        return [$m[1], $m[2]];
-    }
-    if (preg_match('/\[([^\]]+)\]\s*$/', $q, $m)) {
-        return ['dbo', $m[1]];
-    }
-    return ['dbo', $q];
 }

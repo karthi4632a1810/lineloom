@@ -63,14 +63,18 @@ export const createToken = async (input = {}) => {
   return token.toObject();
 };
 
-export const startConsulting = async (tokenId = "") => {
+export const startConsulting = async (tokenId = "", payload = {}) => {
   const token = await getTokenOrThrow(tokenId);
   if (!["WAITING", "ACTIVE"].includes(token.status)) {
     throw new ApiError("Only waiting tokens can start consultation", 400);
   }
   const now = new Date();
   const tracking = await updateTracking(tokenId, { consult_start: now });
+  const selectedDepartment = String(payload?.department ?? "").trim();
   token.status = "CONSULTING";
+  if (selectedDepartment) {
+    token.department = selectedDepartment;
+  }
   await token.save();
   return { token, tracking, metrics: calculateTimeMetrics(tracking) };
 };
@@ -95,23 +99,29 @@ export const endConsulting = async (tokenId = "", payload = {}) => {
   return { token, tracking, metrics: calculateTimeMetrics(tracking) };
 };
 
-export const startTreatment = async (tokenId = "", payload = {}) => {
+export const startTreatment = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
   if (!["CONSULTING", "WAITING"].includes(token.status)) {
     throw new ApiError("Token cannot start treatment at this stage", 400);
   }
-  const trackingRecord = await ensureTrackingRecord(tokenId);
-  if (!trackingRecord?.consult_end) {
-    throw new ApiError("Consultation must end before treatment starts", 400);
-  }
-  const selectedDepartment = String(payload?.department ?? "").trim();
-  if (!selectedDepartment) {
-    throw new ApiError("department is required to start treatment", 400);
-  }
   const now = new Date();
   const tracking = await updateTracking(tokenId, { care_start: now });
   token.status = "IN_TREATMENT";
-  token.department = selectedDepartment;
+  await token.save();
+  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+};
+
+export const moveTokenToWaiting = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const now = new Date();
+  const tracking = await updateTracking(tokenId, {
+    waiting_start: now,
+    consult_start: null,
+    consult_end: null,
+    care_start: null,
+    care_end: null
+  });
+  token.status = "WAITING";
   await token.save();
   return { token, tracking, metrics: calculateTimeMetrics(tracking) };
 };

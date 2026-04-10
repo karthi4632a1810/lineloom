@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Parses GET parameters into normalized filter arrays for OP and IP queries.
  *
- * @return array{view:string, patient_name:string, patient_id:string, gender:string, op_from:string, op_to:string, ip_from:string, ip_to:string, dept:string, ward:string, sort_op:string, sort_ip:string, page_op:int, page_ip:int, page_size:int}
+ * @return array{view:string, patient_name:string, patient_id:string, gender:string, op_from:string, op_to:string, ip_from:string, ip_to:string, dept:string, ward:string, sort_op:string, sort_ip:string, page_op:int, page_ip:int, page_ip_source:int, page_size:int}
  */
 function op_ip_parse_filters(array $config, array $get): array
 {
@@ -30,6 +30,7 @@ function op_ip_parse_filters(array $config, array $get): array
     }
     $pageOp = max(1, (int) ($get['page_op'] ?? 1));
     $pageIp = max(1, (int) ($get['page_ip'] ?? 1));
+    $pageIpSource = max(1, (int) ($get['page_ip_source'] ?? 1));
     $sortOp = $get['sort_op'] ?? 'reg_date_desc';
     $sortIp = $get['sort_ip'] ?? 'adm_date_desc';
     return [
@@ -47,6 +48,7 @@ function op_ip_parse_filters(array $config, array $get): array
         'sort_ip' => $sortIp,
         'page_op' => $pageOp,
         'page_ip' => $pageIp,
+        'page_ip_source' => $pageIpSource,
         'page_size' => $pageSize,
     ];
 }

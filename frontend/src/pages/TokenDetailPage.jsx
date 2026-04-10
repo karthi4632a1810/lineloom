@@ -1,7 +1,12 @@
-import { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { fetchTokenDetail } from "../services/tokenService";
+import {
+  endCareRequest,
+  fetchTokenDetail,
+  startCareRequest,
+  startConsultRequest
+} from "../services/tokenService";
 
 const formatDateTime = (value = null) => {
   if (!value) {
@@ -26,9 +31,24 @@ const getStatusLabel = (status = "WAITING") => {
 
 export const TokenDetailPage = () => {
   const { tokenId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const fetcher = useMemo(() => () => fetchTokenDetail(tokenId ?? ""), [tokenId]);
+  const resolvedTokenId = useMemo(() => {
+    const fromParam = String(tokenId ?? "").replace(/^\/+|\/+$/g, "");
+    if (fromParam) {
+      return fromParam;
+    }
+    const parts = String(location?.pathname ?? "")
+      .split("/")
+      .filter(Boolean);
+    const last = parts.length ? String(parts[parts.length - 1]) : "";
+    return last.replace(/^\/+|\/+$/g, "");
+  }, [tokenId, location?.pathname]);
+
+  const fetcher = useMemo(() => () => fetchTokenDetail(resolvedTokenId), [resolvedTokenId]);
   const { data, isLoading, error, reload } = useAsyncData(fetcher, [fetcher]);
+  const [actionError, setActionError] = useState("");
+  const [isActing, setIsActing] = useState(false);
 
   if (isLoading) {
     return <section className="page">Loading token timeline...</section>;
@@ -54,6 +74,9 @@ export const TokenDetailPage = () => {
     );
   }
   if (!data?.token) {
+    if (!resolvedTokenId) {
+      return <section className="page">Invalid token URL. Open token detail from dashboard row.</section>;
+    }
     return <section className="page">No token detail found.</section>;
   }
 
@@ -97,6 +120,29 @@ export const TokenDetailPage = () => {
     }
   ];
 
+  const runTokenAction = async (action = "start_consult") => {
+    const id = String(token?.token_id ?? resolvedTokenId ?? "");
+    if (!id) {
+      return;
+    }
+    setActionError("");
+    setIsActing(true);
+    try {
+      if (action === "start_consult") {
+        await startConsultRequest(id, { department: token?.department ?? "" });
+      } else if (action === "start_treatment") {
+        await startCareRequest(id);
+      } else if (action === "end_treatment") {
+        await endCareRequest(id);
+      }
+      await reload();
+    } catch (requestError) {
+      setActionError(requestError?.message ?? "Unable to update token state");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
   return (
     <section className="page detail-page">
       <header className="detail-header">
@@ -119,11 +165,30 @@ export const TokenDetailPage = () => {
           </div>
         </div>
         <div className="detail-actions">
-          <button type="button">Re-print Token</button>
-          <button type="button">Transfer</button>
-          <button type="button">Mark as Completed</button>
+          <button
+            type="button"
+            onClick={() => runTokenAction("start_consult")}
+            disabled={isActing || token.status !== "WAITING"}
+          >
+            Start Consult
+          </button>
+          <button
+            type="button"
+            onClick={() => runTokenAction("start_treatment")}
+            disabled={isActing || token.status === "COMPLETED"}
+          >
+            Start Treatment
+          </button>
+          <button
+            type="button"
+            onClick={() => runTokenAction("end_treatment")}
+            disabled={isActing || token.status !== "IN_TREATMENT"}
+          >
+            End Treatment
+          </button>
         </div>
       </header>
+      {actionError ? <p className="error-text">{actionError}</p> : null}
 
       <div className="detail-grid">
         <div className="detail-main">
