@@ -5,8 +5,8 @@ export const createTokenRequest = async (payload = {}) => {
   return data?.data ?? null;
 };
 
-export const fetchLiveQueue = async () => {
-  const { data } = await apiClient.get("/tokens/queue/live");
+export const fetchLiveQueue = async (params = {}) => {
+  const { data } = await apiClient.get("/tokens/queue/live", { params });
   return data?.data ?? [];
 };
 

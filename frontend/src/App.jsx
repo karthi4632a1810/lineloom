@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { LiveQueuePage } from "./pages/LiveQueuePage";
 import { TokenCreationPage } from "./pages/TokenCreationPage";
 import { TokenDetailPage } from "./pages/TokenDetailPage";
 
@@ -88,7 +89,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppLayout>
-                <DashboardPage />
+                <LiveQueuePage />
               </AppLayout>
             </ProtectedRoute>
           }

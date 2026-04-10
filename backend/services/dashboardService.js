@@ -49,7 +49,7 @@ const minutesBetween = (start = null, end = null, useNowIfMissingEnd = false) =>
   return Number((ms / 60000).toFixed(2));
 };
 
-const buildTatMetrics = (tracking = {}, status = "WAITING") => {
+export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
   const waiting = minutesBetween(
     tracking.waiting_start,
     tracking.consult_start,

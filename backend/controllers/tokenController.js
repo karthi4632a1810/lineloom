@@ -67,8 +67,11 @@ export const branchTokenHandler = asyncHandler(async (req, res) => {
   return sendSuccess(res, token, "Token branched", 201);
 });
 
-export const getLiveQueueHandler = asyncHandler(async (_req, res) => {
-  const queue = await getLiveQueue();
+export const getLiveQueueHandler = asyncHandler(async (req, res) => {
+  const queue = await getLiveQueue({
+    search: String(req.query?.search ?? ""),
+    department: String(req.query?.department ?? "")
+  });
   return sendSuccess(res, queue, "Live queue fetched");
 });
 

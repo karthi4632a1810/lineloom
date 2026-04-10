@@ -46,9 +46,19 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const userMessage =
-      error?.response?.data?.message ??
-      "We could not complete your request. Please try again.";
+    const dataMessage = error?.response?.data?.message;
+    let userMessage = dataMessage;
+
+    if (!error.response) {
+      if (error?.code === "ECONNABORTED") {
+        userMessage = `Request timed out after ${apiClient.defaults.timeout ?? 10000} ms. Try again or check the API server.`;
+      } else {
+        userMessage = `Cannot reach the API at ${API_BASE_URL}. Start the backend (e.g. npm run dev in /backend) and confirm VITE_API_BASE_URL if you use a custom URL.`;
+      }
+    } else if (!userMessage) {
+      userMessage = "We could not complete your request. Please try again.";
+    }
+
     return Promise.reject(new Error(userMessage));
   }
 );

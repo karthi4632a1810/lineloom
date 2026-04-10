@@ -5,6 +5,7 @@ import { ApiError } from "../utils/apiError.js";
 import { calculateTimeMetrics } from "../utils/timeMetrics.js";
 import { generateTokenId } from "../utils/tokenId.js";
 import { checkPatientExistsInHis, fetchPatientDemographics } from "./hisService.js";
+import { buildTatMetrics } from "./dashboardService.js";
 
 const ensureTrackingRecord = async (tokenId = "") => {
   const existing = await TimeTracking.findOne({ token_id: tokenId }).lean();
@@ -172,11 +173,69 @@ export const branchToken = async (tokenId = "", newDepartment = "") => {
   return branchedToken.toObject();
 };
 
-export const getLiveQueue = async () => {
+const matchesLiveSearch = (row = {}, search = "") => {
+  const q = String(search ?? "").toLowerCase().trim();
+  if (!q) {
+    return true;
+  }
+  const parts = [
+    row.token_id,
+    row.patient_id,
+    row.visit_id,
+    row.name,
+    row.phone
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+  return parts.some((value) => value.includes(q));
+};
+
+export const getLiveQueue = async (filters = {}) => {
+  const search = String(filters?.search ?? "");
+  const departmentFilter = String(filters?.department ?? "").trim();
+
   const activeTokens = await Token.find({ status: { $ne: "COMPLETED" } })
-    .sort({ created_at: 1 })
+    .sort({ created_at: -1 })
     .lean();
-  return activeTokens;
+
+  const tokenIds = activeTokens.map((token) => token.token_id);
+  const patientIds = activeTokens.map((token) => token.patient_id);
+  const [trackingRows, patientMap] = await Promise.all([
+    TimeTracking.find({ token_id: { $in: tokenIds } }).lean(),
+    fetchPatientDemographics(patientIds)
+  ]);
+  const trackingByToken = trackingRows.reduce((acc, row) => {
+    acc[row.token_id] = row;
+    return acc;
+  }, {});
+
+  return activeTokens
+    .map((token) => {
+      const tracking = trackingByToken[token.token_id] ?? {};
+      const patientInfo = patientMap[token.patient_id] ?? { name: "Unknown", phone: "" };
+      const normalizedStatus = token.status === "ACTIVE" ? "WAITING" : token.status;
+      return {
+        token_id: token.token_id,
+        patient_id: token.patient_id,
+        visit_id: token.visit_id,
+        name: patientInfo.name,
+        phone: patientInfo.phone ?? "",
+        department: token.department,
+        status: normalizedStatus,
+        consult_start: tracking.consult_start ?? null,
+        consult_end: tracking.consult_end ?? null,
+        treatment_start: tracking.care_start ?? null,
+        treatment_end: tracking.care_end ?? null,
+        created_at: token.created_at,
+        ...buildTatMetrics(tracking, normalizedStatus)
+      };
+    })
+    .filter((row) => {
+      if (departmentFilter && row.department !== departmentFilter) {
+        return false;
+      }
+      return matchesLiveSearch(row, search);
+    });
 };
 
 export const getTokenDetail = async (tokenId = "") => {

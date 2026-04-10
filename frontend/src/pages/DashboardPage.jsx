@@ -208,7 +208,9 @@ export const DashboardPage = () => {
 
       {error ? <p className="error-text">{error}</p> : null}
       {isLoading ? <p>Loading dashboard rows...</p> : null}
-      {!isLoading && !rows.length ? <p>No patient tokens available for selected range.</p> : null}
+      {!isLoading && !error && !rows.length ? (
+        <p>No patient tokens available for selected range.</p>
+      ) : null}
 
       {!isLoading && rows.length ? (
         <article className="card table-card">
