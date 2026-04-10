@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAsyncData } from "../hooks/useAsyncData";
+import { fetchActiveDepartments } from "../services/departmentService";
 import {
   endCareRequest,
   fetchTokenDetail,
@@ -49,6 +50,20 @@ export const TokenDetailPage = () => {
   const { data, isLoading, error, reload } = useAsyncData(fetcher, [fetcher]);
   const [actionError, setActionError] = useState("");
   const [isActing, setIsActing] = useState(false);
+  const [departmentCatalog, setDepartmentCatalog] = useState([]);
+  const [consultDept, setConsultDept] = useState("");
+  const [showConsultModal, setShowConsultModal] = useState(false);
+
+  useEffect(() => {
+    fetchActiveDepartments()
+      .then((list) => setDepartmentCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setDepartmentCatalog([]));
+  }, []);
+
+  const consultDepartmentOptions = useMemo(
+    () => departmentCatalog.map((d) => d.name).filter(Boolean),
+    [departmentCatalog]
+  );
 
   if (isLoading) {
     return <section className="page">Loading token timeline...</section>;
@@ -125,12 +140,17 @@ export const TokenDetailPage = () => {
     if (!id) {
       return;
     }
+    if (action === "start_consult") {
+      const rowDept = String(token?.department ?? "").trim();
+      const initial = consultDepartmentOptions.includes(rowDept) ? rowDept : "";
+      setConsultDept(initial);
+      setShowConsultModal(true);
+      return;
+    }
     setActionError("");
     setIsActing(true);
     try {
-      if (action === "start_consult") {
-        await startConsultRequest(id, { department: token?.department ?? "" });
-      } else if (action === "start_treatment") {
+      if (action === "start_treatment") {
         await startCareRequest(id);
       } else if (action === "end_treatment") {
         await endCareRequest(id);
@@ -138,6 +158,28 @@ export const TokenDetailPage = () => {
       await reload();
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to update token state");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const submitStartConsult = async () => {
+    const id = String(token?.token_id ?? resolvedTokenId ?? "");
+    if (!id) {
+      return;
+    }
+    if (!String(consultDept ?? "").trim()) {
+      setActionError("Select a department to start consultation.");
+      return;
+    }
+    setActionError("");
+    setIsActing(true);
+    try {
+      await startConsultRequest(id, { department: consultDept });
+      setShowConsultModal(false);
+      await reload();
+    } catch (requestError) {
+      setActionError(requestError?.message ?? "Unable to start consultation");
     } finally {
       setIsActing(false);
     }
@@ -175,7 +217,16 @@ export const TokenDetailPage = () => {
           <button
             type="button"
             onClick={() => runTokenAction("start_treatment")}
-            disabled={isActing || token.status === "COMPLETED"}
+            disabled={
+              isActing ||
+              token.status !== "CONSULTING" ||
+              !tracking.consult_end
+            }
+            title={
+              token.status === "CONSULTING" && !tracking.consult_end
+                ? "End consultation before starting treatment"
+                : undefined
+            }
           >
             Start Treatment
           </button>
@@ -189,6 +240,44 @@ export const TokenDetailPage = () => {
         </div>
       </header>
       {actionError ? <p className="error-text">{actionError}</p> : null}
+
+      {showConsultModal ? (
+        <section className="modal-overlay">
+          <article className="modal-card consult-modal">
+            <div className="consult-modal-header">
+              <h3>Start Consulting</h3>
+            </div>
+            <div className="consult-modal-form">
+              <label htmlFor="detail_consult_department">Department</label>
+              <select
+                id="detail_consult_department"
+                value={consultDept}
+                onChange={(event) => setConsultDept(event.target.value)}
+              >
+                <option value="">Select department</option>
+                {consultDepartmentOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <div className="consult-modal-actions">
+                <button type="button" onClick={submitStartConsult} disabled={isActing}>
+                  {isActing ? "Starting…" : "Start"}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowConsultModal(false)}
+                  disabled={isActing}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </article>
+        </section>
+      ) : null}
 
       <div className="detail-grid">
         <div className="detail-main">

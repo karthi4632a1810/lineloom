@@ -10,7 +10,8 @@ import {
   getTokenDetail,
   moveTokenToWaiting,
   startConsulting,
-  startTreatment
+  startTreatment,
+  stepBackToken
 } from "../services/tokenService.js";
 
 const createTokenSchema = z.object({
@@ -24,7 +25,7 @@ const branchSchema = z.object({
 });
 
 const startConsultSchema = z.object({
-  department: z.string().optional().default("")
+  department: z.string().min(1, "department is required")
 });
 
 const getTokenId = (req = {}) => String(req?.params?.id ?? "").trim();
@@ -38,6 +39,11 @@ export const createTokenHandler = asyncHandler(async (req, res) => {
 export const startWaiting = asyncHandler(async (req, res) => {
   const result = await moveTokenToWaiting(getTokenId(req));
   return sendSuccess(res, result, "Moved token to waiting");
+});
+
+export const stepBack = asyncHandler(async (req, res) => {
+  const result = await stepBackToken(getTokenId(req));
+  return sendSuccess(res, result, "Stepped back one stage");
 });
 
 export const startConsult = asyncHandler(async (req, res) => {

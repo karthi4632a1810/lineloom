@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { StepBackConfirmModal } from "../components/StepBackConfirmModal";
+import { fetchActiveDepartments } from "../services/departmentService";
+import { getStepBackPreview } from "../utils/stepBackPreview";
 import {
-  branchTokenRequest,
   endCareRequest,
   endConsultRequest,
   fetchLiveQueue,
   startCareRequest,
   startConsultRequest,
-  startWaitingRequest
+  stepBackRequest
 } from "../services/tokenService";
 
 const formatDateTime = (value = null) => {
@@ -35,12 +37,19 @@ export const LiveQueuePage = () => {
   const [consultStartModal, setConsultStartModal] = useState({ tokenId: "", department: "" });
   const [confirmAction, setConfirmAction] = useState({ tokenId: "", action: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [branchDepartment, setBranchDepartment] = useState("ENT");
+  const [departmentCatalog, setDepartmentCatalog] = useState([]);
+  const [stepBackRow, setStepBackRow] = useState(null);
 
-  const departmentOptions = useMemo(
-    () => [...new Set(rows.map((row) => row.department).filter(Boolean))],
-    [rows]
+  const consultDepartmentOptions = useMemo(
+    () => departmentCatalog.map((d) => d.name).filter(Boolean),
+    [departmentCatalog]
   );
+
+  useEffect(() => {
+    fetchActiveDepartments()
+      .then((list) => setDepartmentCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setDepartmentCatalog([]));
+  }, []);
 
   const loadQueue = useCallback(async () => {
     setIsLoading(true);
@@ -66,9 +75,11 @@ export const LiveQueuePage = () => {
   };
 
   const openConsultStartModal = (row = null) => {
+    const rowDept = String(row?.department ?? "").trim();
+    const initial = consultDepartmentOptions.includes(rowDept) ? rowDept : "";
     setConsultStartModal({
       tokenId: String(row?.token_id ?? ""),
-      department: String(row?.department ?? "")
+      department: initial
     });
   };
 
@@ -81,6 +92,10 @@ export const LiveQueuePage = () => {
 
   const handleStartConsulting = async () => {
     if (!consultStartModal.tokenId) {
+      return;
+    }
+    if (!String(consultStartModal.department ?? "").trim()) {
+      setRequestError("Select a department to start consultation.");
       return;
     }
     setIsSubmitting(true);
@@ -113,8 +128,6 @@ export const LiveQueuePage = () => {
         await startCareRequest(tokenId);
       } else if (action === "end_treatment") {
         await endCareRequest(tokenId);
-      } else if (action === "revert_waiting") {
-        await startWaitingRequest(tokenId);
       }
       closeConfirmAction();
       await loadQueue();
@@ -125,13 +138,29 @@ export const LiveQueuePage = () => {
     }
   };
 
-  const handleBranch = async (tokenId = "") => {
+  const openStepBackModal = (row = null) => {
+    if (!getStepBackPreview(row).canStep) {
+      return;
+    }
+    setStepBackRow(row);
+  };
+
+  const closeStepBackModal = () => setStepBackRow(null);
+
+  const executeStepBack = async (tokenId = "") => {
+    if (!tokenId) {
+      return;
+    }
+    setIsSubmitting(true);
     setRequestError("");
     try {
-      await branchTokenRequest(tokenId, { new_department: branchDepartment });
+      await stepBackRequest(tokenId);
+      setStepBackRow(null);
       await loadQueue();
-    } catch (branchError) {
-      setRequestError(branchError?.message ?? "Branch action failed");
+    } catch (actionError) {
+      setRequestError(actionError?.message ?? "Unable to step back");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -256,7 +285,10 @@ export const LiveQueuePage = () => {
                       {row.status}
                     </span>
                   </td>
-                  <td onClick={(event) => event.stopPropagation()}>
+                  <td
+                    className="token-actions-cell"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <div className="action-group" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
@@ -279,8 +311,16 @@ export const LiveQueuePage = () => {
                       <button
                         type="button"
                         onClick={() => openConfirmAction(row.token_id, "start_treatment")}
-                        disabled={isSubmitting || row.status === "COMPLETED"}
-                        title="Start Treatment"
+                        disabled={
+                          isSubmitting ||
+                          row.status !== "CONSULTING" ||
+                          !row.consult_end
+                        }
+                        title={
+                          row.status === "CONSULTING" && !row.consult_end
+                            ? "End consultation before starting treatment"
+                            : "Start Treatment"
+                        }
                         aria-label="Start Treatment"
                       >
                         <span className="action-icon">ST</span>
@@ -296,23 +336,19 @@ export const LiveQueuePage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => openConfirmAction(row.token_id, "revert_waiting")}
-                        disabled={isSubmitting}
-                        title="Move back to waiting"
-                        aria-label="Move back to waiting"
+                        className="action-back"
+                        onClick={() => openStepBackModal(row)}
+                        disabled={
+                          isSubmitting ||
+                          row.status === "WAITING" ||
+                          !getStepBackPreview(row).canStep
+                        }
+                        title="Step back one stage"
+                        aria-label="Step back one stage"
                       >
-                        <span className="action-icon">RW</span>
-                      </button>
-                    </div>
-                    <div className="action-group live-queue-branch">
-                      <input
-                        value={branchDepartment}
-                        onChange={(event) => setBranchDepartment(event.target.value)}
-                        placeholder="New department"
-                        aria-label="Branch department"
-                      />
-                      <button type="button" onClick={() => handleBranch(row.token_id)}>
-                        Branch
+                        <span className="action-icon" aria-hidden>
+                          ←
+                        </span>
                       </button>
                     </div>
                   </td>
@@ -322,6 +358,13 @@ export const LiveQueuePage = () => {
           </table>
         </article>
       ) : null}
+
+      <StepBackConfirmModal
+        row={stepBackRow}
+        onClose={closeStepBackModal}
+        onConfirm={executeStepBack}
+        isSubmitting={isSubmitting}
+      />
 
       {consultStartModal.tokenId ? (
         <section className="modal-overlay">
@@ -339,7 +382,7 @@ export const LiveQueuePage = () => {
                 }
               >
                 <option value="">Select department</option>
-                {departmentOptions.map((department) => (
+                {consultDepartmentOptions.map((department) => (
                   <option key={department} value={department}>
                     {department}
                   </option>
@@ -370,9 +413,7 @@ export const LiveQueuePage = () => {
                   ? "Are you sure you want to end consulting?"
                   : confirmAction.action === "start_treatment"
                     ? "Are you sure you want to start treatment?"
-                    : confirmAction.action === "end_treatment"
-                      ? "Are you sure you want to end treatment?"
-                      : "Are you sure you want to move this token back to waiting?"}
+                    : "Are you sure you want to end treatment?"}
               </p>
               <div className="consult-modal-actions">
                 <button type="button" onClick={handleConfirmAction} disabled={isSubmitting}>

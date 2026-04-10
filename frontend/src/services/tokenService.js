@@ -17,6 +17,9 @@ export const fetchTokenDetail = async (tokenId = "") => {
 
 export const startWaitingRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/start-waiting`);
+
+export const stepBackRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/step-back`);
 export const startConsultRequest = async (tokenId = "", payload = {}) =>
   apiClient.post(`/tokens/${tokenId}/start-consult`, payload);
 export const endConsultRequest = async (tokenId = "") =>

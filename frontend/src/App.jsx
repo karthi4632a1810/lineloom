@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
+import { AdminRoute } from "./components/AdminRoute";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { DepartmentSettingsPage } from "./pages/DepartmentSettingsPage";
 import { LiveQueuePage } from "./pages/LiveQueuePage";
 import { TokenCreationPage } from "./pages/TokenCreationPage";
 import { TokenDetailPage } from "./pages/TokenDetailPage";
@@ -151,6 +153,18 @@ export default function App() {
               <AppLayout>
                 <PlaceholderPage title="Help Center" />
               </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/departments"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <AppLayout>
+                  <DepartmentSettingsPage />
+                </AppLayout>
+              </AdminRoute>
             </ProtectedRoute>
           }
         />

@@ -6,6 +6,7 @@ import { calculateTimeMetrics } from "../utils/timeMetrics.js";
 import { generateTokenId } from "../utils/tokenId.js";
 import { checkPatientExistsInHis, fetchPatientDemographics } from "./hisService.js";
 import { buildTatMetrics } from "./dashboardService.js";
+import { isActiveDepartmentName } from "./departmentService.js";
 
 const ensureTrackingRecord = async (tokenId = "") => {
   const existing = await TimeTracking.findOne({ token_id: tokenId }).lean();
@@ -42,6 +43,11 @@ export const createToken = async (input = {}) => {
     throw new ApiError("patient_id, visit_id and department are required", 400);
   }
 
+  const deptOk = await isActiveDepartmentName(department);
+  if (!deptOk) {
+    throw new ApiError("Invalid or inactive department. Configure departments under admin settings.", 400);
+  }
+
   const isValidPatient = await checkPatientExistsInHis(patient_id, visit_id);
   if (!isValidPatient) {
     throw new ApiError("Patient visit not found in HIS", 400);
@@ -69,13 +75,18 @@ export const startConsulting = async (tokenId = "", payload = {}) => {
   if (!["WAITING", "ACTIVE"].includes(token.status)) {
     throw new ApiError("Only waiting tokens can start consultation", 400);
   }
+  const selectedDepartment = String(payload?.department ?? "").trim();
+  if (!selectedDepartment) {
+    throw new ApiError("department is required to start consultation", 400);
+  }
+  const deptOk = await isActiveDepartmentName(selectedDepartment);
+  if (!deptOk) {
+    throw new ApiError("Invalid or inactive department. Choose a department from admin settings.", 400);
+  }
   const now = new Date();
   const tracking = await updateTracking(tokenId, { consult_start: now });
-  const selectedDepartment = String(payload?.department ?? "").trim();
   token.status = "CONSULTING";
-  if (selectedDepartment) {
-    token.department = selectedDepartment;
-  }
+  token.department = selectedDepartment;
   await token.save();
   return { token, tracking, metrics: calculateTimeMetrics(tracking) };
 };
@@ -102,14 +113,18 @@ export const endConsulting = async (tokenId = "", payload = {}) => {
 
 export const startTreatment = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
-  if (!["CONSULTING", "WAITING"].includes(token.status)) {
-    throw new ApiError("Token cannot start treatment at this stage", 400);
+  const tracking = await ensureTrackingRecord(tokenId);
+  if (token.status !== "CONSULTING") {
+    throw new ApiError("Start treatment is only available when the token is in consultation", 400);
+  }
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before starting treatment", 400);
   }
   const now = new Date();
-  const tracking = await updateTracking(tokenId, { care_start: now });
+  const nextTracking = await updateTracking(tokenId, { care_start: now });
   token.status = "IN_TREATMENT";
   await token.save();
-  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+  return { token, tracking: nextTracking, metrics: calculateTimeMetrics(nextTracking) };
 };
 
 export const moveTokenToWaiting = async (tokenId = "") => {
@@ -125,6 +140,46 @@ export const moveTokenToWaiting = async (tokenId = "") => {
   token.status = "WAITING";
   await token.save();
   return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+};
+
+/**
+ * Reverts one step in the workflow (reverse of forward progress):
+ * treatment start → consult ended → consult started → waiting
+ */
+export const stepBackToken = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+
+  if (token.status === "IN_TREATMENT") {
+    if (!tracking.care_start) {
+      throw new ApiError("Cannot step back: treatment not started", 400);
+    }
+    await updateTracking(tokenId, { care_start: null, care_end: null });
+    token.status = tracking.consult_start ? "CONSULTING" : "WAITING";
+    await token.save();
+    const next = await ensureTrackingRecord(tokenId);
+    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  }
+
+  if (token.status === "CONSULTING" && tracking.consult_end) {
+    await updateTracking(tokenId, {
+      consult_end: null,
+      consult_note: "",
+      referred_department: ""
+    });
+    const next = await ensureTrackingRecord(tokenId);
+    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  }
+
+  if (token.status === "CONSULTING" && tracking.consult_start) {
+    await updateTracking(tokenId, { consult_start: null });
+    token.status = "WAITING";
+    await token.save();
+    const next = await ensureTrackingRecord(tokenId);
+    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  }
+
+  throw new ApiError("Already at the earliest step (waiting).", 400);
 };
 
 export const endTreatment = async (tokenId = "") => {
@@ -143,6 +198,10 @@ export const branchToken = async (tokenId = "", newDepartment = "") => {
   const currentToken = await getTokenOrThrow(tokenId);
   if (!newDepartment) {
     throw new ApiError("new_department is required", 400);
+  }
+  const branchDeptOk = await isActiveDepartmentName(newDepartment);
+  if (!branchDeptOk) {
+    throw new ApiError("Invalid or inactive department for branch", 400);
   }
 
   const now = new Date();

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { StepBackConfirmModal } from "../components/StepBackConfirmModal";
+import { fetchActiveDepartments } from "../services/departmentService";
+import { getStepBackPreview } from "../utils/stepBackPreview";
 import { fetchDashboardSummary, fetchDashboardTokens } from "../services/dashboardService";
 import {
   endCareRequest,
   endConsultRequest,
-  startWaitingRequest,
   startCareRequest,
-  startConsultRequest
+  startConsultRequest,
+  stepBackRequest
 } from "../services/tokenService";
 
 const toDateTimeLocalValue = (value = new Date()) => {
@@ -52,11 +55,24 @@ export const DashboardPage = () => {
   const [consultStartModal, setConsultStartModal] = useState({ tokenId: "", department: "" });
   const [confirmAction, setConfirmAction] = useState({ tokenId: "", action: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [departmentCatalog, setDepartmentCatalog] = useState([]);
+  const [stepBackRow, setStepBackRow] = useState(null);
 
   const departmentOptions = useMemo(
     () => [...new Set(rows.map((row) => row.department).filter(Boolean))],
     [rows]
   );
+
+  const consultDepartmentOptions = useMemo(
+    () => departmentCatalog.map((d) => d.name).filter(Boolean),
+    [departmentCatalog]
+  );
+
+  useEffect(() => {
+    fetchActiveDepartments()
+      .then((list) => setDepartmentCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setDepartmentCatalog([]));
+  }, []);
 
   const loadDashboard = async () => {
     setIsLoading(true);
@@ -90,9 +106,11 @@ export const DashboardPage = () => {
   };
 
   const openConsultStartModal = (row = null) => {
+    const rowDept = String(row?.department ?? "").trim();
+    const initial = consultDepartmentOptions.includes(rowDept) ? rowDept : "";
     setConsultStartModal({
       tokenId: String(row?.token_id ?? ""),
-      department: String(row?.department ?? "")
+      department: initial
     });
   };
 
@@ -105,6 +123,10 @@ export const DashboardPage = () => {
 
   const handleStartConsulting = async () => {
     if (!consultStartModal.tokenId) {
+      return;
+    }
+    if (!String(consultStartModal.department ?? "").trim()) {
+      setError("Select a department to start consultation.");
       return;
     }
     setIsSubmitting(true);
@@ -137,13 +159,37 @@ export const DashboardPage = () => {
         await startCareRequest(tokenId);
       } else if (action === "end_treatment") {
         await endCareRequest(tokenId);
-      } else if (action === "revert_waiting") {
-        await startWaitingRequest(tokenId);
       }
       closeConfirmAction();
       await loadDashboard();
     } catch (actionError) {
       setError(actionError?.message ?? "Unable to update token state");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openStepBackModal = (row = null) => {
+    if (!getStepBackPreview(row).canStep) {
+      return;
+    }
+    setStepBackRow(row);
+  };
+
+  const closeStepBackModal = () => setStepBackRow(null);
+
+  const executeStepBack = async (tokenId = "") => {
+    if (!tokenId) {
+      return;
+    }
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await stepBackRequest(tokenId);
+      setStepBackRow(null);
+      await loadDashboard();
+    } catch (actionError) {
+      setError(actionError?.message ?? "Unable to step back");
     } finally {
       setIsSubmitting(false);
     }
@@ -297,7 +343,10 @@ export const DashboardPage = () => {
                       {row.status}
                     </span>
                   </td>
-                  <td onClick={(event) => event.stopPropagation()}>
+                  <td
+                    className="token-actions-cell"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <div className="action-group" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
@@ -320,8 +369,16 @@ export const DashboardPage = () => {
                       <button
                         type="button"
                         onClick={() => openConfirmAction(row.token_id, "start_treatment")}
-                        disabled={isSubmitting || row.status === "COMPLETED"}
-                        title="Start Treatment"
+                        disabled={
+                          isSubmitting ||
+                          row.status !== "CONSULTING" ||
+                          !row.consult_end
+                        }
+                        title={
+                          row.status === "CONSULTING" && !row.consult_end
+                            ? "End consultation before starting treatment"
+                            : "Start Treatment"
+                        }
                         aria-label="Start Treatment"
                       >
                         <span className="action-icon">ST</span>
@@ -337,12 +394,19 @@ export const DashboardPage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => openConfirmAction(row.token_id, "revert_waiting")}
-                        disabled={isSubmitting}
-                        title="Move back to waiting"
-                        aria-label="Move back to waiting"
+                        className="action-back"
+                        onClick={() => openStepBackModal(row)}
+                        disabled={
+                          isSubmitting ||
+                          row.status === "WAITING" ||
+                          !getStepBackPreview(row).canStep
+                        }
+                        title="Step back one stage"
+                        aria-label="Step back one stage"
                       >
-                        <span className="action-icon">RW</span>
+                        <span className="action-icon" aria-hidden>
+                          ←
+                        </span>
                       </button>
                     </div>
                   </td>
@@ -352,6 +416,13 @@ export const DashboardPage = () => {
           </table>
         </article>
       ) : null}
+
+      <StepBackConfirmModal
+        row={stepBackRow}
+        onClose={closeStepBackModal}
+        onConfirm={executeStepBack}
+        isSubmitting={isSubmitting}
+      />
 
       {consultStartModal.tokenId ? (
         <section className="modal-overlay">
@@ -369,7 +440,7 @@ export const DashboardPage = () => {
                 }
               >
                 <option value="">Select department</option>
-                {departmentOptions.map((department) => (
+                {consultDepartmentOptions.map((department) => (
                   <option key={department} value={department}>
                     {department}
                   </option>
@@ -400,9 +471,7 @@ export const DashboardPage = () => {
                   ? "Are you sure you want to end consulting?"
                   : confirmAction.action === "start_treatment"
                     ? "Are you sure you want to start treatment?"
-                    : confirmAction.action === "end_treatment"
-                      ? "Are you sure you want to end treatment?"
-                      : "Are you sure you want to move this token back to waiting?"}
+                    : "Are you sure you want to end treatment?"}
               </p>
               <div className="consult-modal-actions">
                 <button type="button" onClick={handleConfirmAction} disabled={isSubmitting}>

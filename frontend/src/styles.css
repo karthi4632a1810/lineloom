@@ -411,6 +411,16 @@ tr.clickable-row {
   border-radius: 10px;
 }
 
+.action-group button.action-back .action-icon {
+  font-size: 16px;
+  font-weight: 900;
+  width: auto;
+  height: auto;
+  min-width: 26px;
+  padding: 0 2px;
+  background: transparent;
+}
+
 .action-icon {
   display: inline-flex;
   align-items: center;
@@ -1278,8 +1288,105 @@ tr.clickable-row {
   min-width: 0;
 }
 
-.live-queue-branch input {
-  max-width: 140px;
+.token-actions-cell {
+  vertical-align: top;
+  min-width: 240px;
+  max-width: 340px;
+}
+
+.token-actions-cell .action-group {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.department-settings-form {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px 14px;
+  align-items: center;
+  max-width: 520px;
+}
+
+.department-settings-form .checkbox-row {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.department-settings-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.step-back-modal .step-back-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.step-back-preview-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.step-back-preview-status > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.step-back-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.step-back-arrow {
+  font-size: 22px;
+  font-weight: 700;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.step-back-detail {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.step-back-preview-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.step-back-checkbox-label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.step-back-checkbox-label input {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 860px) {

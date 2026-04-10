@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { fetchActiveDepartments } from "../services/departmentService";
 import { searchHisPatients } from "../services/hisService";
 import { createTokenRequest } from "../services/tokenService";
 
@@ -16,7 +17,14 @@ export const TokenCreationPage = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [departmentCatalog, setDepartmentCatalog] = useState([]);
   const requestCounterRef = useRef(0);
+
+  useEffect(() => {
+    fetchActiveDepartments()
+      .then((list) => setDepartmentCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setDepartmentCatalog([]));
+  }, []);
 
   const performSearch = async () => {
     const n = String(name ?? "").trim();
@@ -64,10 +72,13 @@ export const TokenCreationPage = () => {
 
   const handleOpenCreateModal = (patient = null) => {
     setSelectedPatient(patient);
+    const suggested = String(patient?.department ?? "").trim();
+    const names = departmentCatalog.map((d) => d.name);
+    const initialDept = names.includes(suggested) ? suggested : "";
     setForm({
       patient_id: patient?.patient_id ?? "",
       visit_id: patient?.visit_id ?? "",
-      department: patient?.department ?? ""
+      department: initialDept
     });
     setCreatedToken(null);
   };
@@ -228,13 +239,20 @@ export const TokenCreationPage = () => {
                 <label htmlFor="visit_id">Reg no (OP/IP)</label>
                 <input id="visit_id" name="visit_id" value={form.visit_id} readOnly />
                 <label htmlFor="department">Department</label>
-                <input
+                <select
                   id="department"
                   name="department"
                   value={form.department}
                   onChange={handleChange}
                   required
-                />
+                >
+                  <option value="">Select department</option>
+                  {departmentCatalog.map((dept) => (
+                    <option key={dept._id ?? dept.name} value={dept.name}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <p className="muted small token-modal-note">
                 Visit type: {selectedPatient?.type === "IP" ? "Inpatient (IP)" : "Outpatient (OP)"}

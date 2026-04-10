@@ -8,7 +8,8 @@ import {
   getTokenDetailHandler,
   startCare,
   startConsult,
-  startWaiting
+  startWaiting,
+  stepBack
 } from "../controllers/tokenController.js";
 import { authorizeRoles, requireAuth } from "../middlewares/authMiddleware.js";
 
@@ -17,6 +18,11 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/queue/live", getLiveQueueHandler);
+router.post(
+  "/:id/step-back",
+  authorizeRoles("admin", "doctor", "nurse"),
+  stepBack
+);
 router.get("/:id", getTokenDetailHandler);
 router.post("/", authorizeRoles("admin", "nurse"), createTokenHandler);
 router.post("/:id/start-waiting", authorizeRoles("admin", "nurse"), startWaiting);
