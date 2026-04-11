@@ -1,6 +1,6 @@
 import { Token } from "../models/Token.js";
 import { TimeTracking } from "../models/TimeTracking.js";
-import { fetchPatientDemographics } from "./hisService.js";
+import { resolveEffectiveTreatmentStart } from "../utils/timeMetrics.js";
 
 const getTodayRange = () => {
   const start = new Date();
@@ -60,17 +60,36 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     tracking.consult_end,
     status === "CONSULTING"
   );
+  const billing = minutesBetween(
+    tracking.billing_start,
+    tracking.billing_end,
+    status === "CONSULTING" && Boolean(tracking.billing_start) && !tracking.billing_end
+  );
+  const labWait = minutesBetween(
+    tracking.billing_end,
+    tracking.lab_start,
+    status === "CONSULTING" && Boolean(tracking.billing_end) && !tracking.lab_start
+  );
+  const labTest = minutesBetween(
+    tracking.lab_start,
+    tracking.lab_end,
+    status === "CONSULTING" && Boolean(tracking.lab_start) && !tracking.lab_end
+  );
+  const treatmentStart = resolveEffectiveTreatmentStart(tracking.care_start, tracking.consult_end);
   const treatment = minutesBetween(
-    tracking.care_start,
+    treatmentStart,
     tracking.care_end,
     status === "IN_TREATMENT"
   );
-  const overall = [waiting, consulting, treatment]
+  const overall = [waiting, consulting, billing, labWait, labTest, treatment]
     .filter((value) => value != null)
     .reduce((sum, value) => sum + value, 0);
   return {
     waiting_tat_minutes: waiting,
     consulting_tat_minutes: consulting,
+    billing_tat_minutes: billing,
+    lab_wait_tat_minutes: labWait,
+    lab_test_tat_minutes: labTest,
     treatment_tat_minutes: treatment,
     overall_tat_minutes: Number(overall.toFixed(2))
   };
@@ -118,11 +137,7 @@ export const getDashboardSummary = async (filters = {}) => {
 export const getDashboardTokens = async (filters = {}) => {
   const tokens = await resolveTimeRange(filters);
   const tokenIds = tokens.map((token) => token.token_id);
-  const patientIds = tokens.map((token) => token.patient_id);
-  const [trackingRows, patientMap] = await Promise.all([
-    TimeTracking.find({ token_id: { $in: tokenIds } }).lean(),
-    fetchPatientDemographics(patientIds)
-  ]);
+  const trackingRows = await TimeTracking.find({ token_id: { $in: tokenIds } }).lean();
   const trackingByToken = trackingRows.reduce((acc, row) => {
     acc[row.token_id] = row;
     return acc;
@@ -133,19 +148,23 @@ export const getDashboardTokens = async (filters = {}) => {
   return tokens
     .map((token) => {
       const tracking = trackingByToken[token.token_id] ?? {};
-      const patientInfo = patientMap[token.patient_id] ?? { name: "Unknown", phone: "" };
       return {
         token_id: token.token_id,
         patient_id: token.patient_id,
         visit_id: token.visit_id,
-        name: patientInfo.name,
-        phone: patientInfo.phone,
+        name: token.patient_name || `Patient ${token.patient_id}`,
+        phone: token.patient_phone || "",
         department: token.department,
         status: token.status === "ACTIVE" ? "WAITING" : token.status,
+        waiting_start: tracking.waiting_start ?? null,
         consult_start: tracking.consult_start ?? null,
         consult_end: tracking.consult_end ?? null,
         treatment_start: tracking.care_start ?? null,
         treatment_end: tracking.care_end ?? null,
+        billing_start: tracking.billing_start ?? null,
+        billing_end: tracking.billing_end ?? null,
+        lab_start: tracking.lab_start ?? null,
+        lab_end: tracking.lab_end ?? null,
         consult_note: tracking.consult_note ?? "",
         referred_department: tracking.referred_department ?? "",
         created_at: token.created_at,

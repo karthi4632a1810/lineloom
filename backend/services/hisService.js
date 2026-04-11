@@ -53,6 +53,24 @@ const USER_TABLE_CANDIDATES = ["Mast_User", "Mast_Users", "Mast_Employee", "Mast
 const delay = async (ms = 200) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+const sendDebugLog = (hypothesisId = "", message = "", data = {}) => {
+  // #region agent log
+  fetch("http://127.0.0.1:7922/ingest/204861d7-45da-4112-b57a-5e4addac40db", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c166b2" },
+    body: JSON.stringify({
+      sessionId: "c166b2",
+      runId: "sql-mongo-check-pre",
+      hypothesisId,
+      location: "backend/services/hisService.js",
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+  // #endregion
+};
+
 const getCache = (key = "") => {
   const hit = queryCache.get(key);
   if (!hit) {
@@ -90,6 +108,16 @@ const executeHisQueryWithRetry = async (
   timeoutMs = 10000,
   bindParams = null
 ) => {
+  const firstKeyword = String(query ?? "")
+    .trim()
+    .replace(/^\(+/, "")
+    .split(/\s+/)[0]
+    ?.toUpperCase();
+  const looksReadOnly = ["SELECT", "WITH"].includes(firstKeyword);
+  sendDebugLog("H1", "HIS query execution started", {
+    firstKeyword,
+    looksReadOnly
+  });
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
     try {
@@ -100,9 +128,18 @@ const executeHisQueryWithRetry = async (
       }
       request.timeout = timeoutMs;
       const result = await request.query(query);
+      sendDebugLog("H1", "HIS query execution success", {
+        firstKeyword,
+        recordCount: Array.isArray(result?.recordset) ? result.recordset.length : 0
+      });
       return result?.recordset ?? [];
     } catch (error) {
       attempt += 1;
+      sendDebugLog("H1", "HIS query execution error", {
+        firstKeyword,
+        attempt,
+        message: String(error?.message ?? "unknown")
+      });
       const isLastAttempt = attempt >= MAX_RETRIES;
       logger.error("HIS query failed", {
         attempt,

@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { DepartmentSettingsPage } from "./pages/DepartmentSettingsPage";
+import { CompletedQueuePage } from "./pages/CompletedQueuePage";
 import { LiveQueuePage } from "./pages/LiveQueuePage";
 import { TokenCreationPage } from "./pages/TokenCreationPage";
 import { TokenDetailPage } from "./pages/TokenDetailPage";
@@ -92,6 +93,16 @@ export default function App() {
             <ProtectedRoute>
               <AppLayout>
                 <LiveQueuePage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/completed-queue"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <CompletedQueuePage />
               </AppLayout>
             </ProtectedRoute>
           }

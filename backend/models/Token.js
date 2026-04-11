@@ -5,6 +5,8 @@ const tokenSchema = new mongoose.Schema(
     token_id: { type: String, required: true, unique: true, index: true },
     patient_id: { type: String, required: true, index: true },
     visit_id: { type: String, required: true, index: true },
+    patient_name: { type: String, default: "", trim: true },
+    patient_phone: { type: String, default: "", trim: true },
     department: { type: String, required: true, trim: true },
     parent_token_id: { type: String, default: null, index: true },
     status: {

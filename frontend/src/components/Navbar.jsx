@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 const topLinks = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/patient-queue", label: "Patient Queue" },
+  { to: "/completed-queue", label: "Completed" },
   { to: "/patient-detail", label: "Patient Detail" },
   { to: "/create-token", label: "Create Token" },
   { to: "/department-analytics", label: "Department Analytics" },
@@ -12,6 +13,7 @@ const topLinks = [
 const sideLinks = [
   { to: "/overview", label: "Overview", icon: "O" },
   { to: "/live-queue", label: "Live Queue", icon: "LQ" },
+  { to: "/completed-queue", label: "Completed", icon: "CP" },
   { to: "/patient-detail", label: "Patient Detail", icon: "PD" },
   { to: "/create-token", label: "Create Token", icon: "CT" },
   { to: "/patient-records", label: "Patient Records", icon: "PR" },

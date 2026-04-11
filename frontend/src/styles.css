@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  font-family: "Inter", "Manrope", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Poppins", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.45;
@@ -22,7 +22,7 @@ h3,
 h4,
 .brand-title,
 .summary-card p {
-  font-family: Manrope, Inter, "Segoe UI", sans-serif;
+  font-family: "Poppins", "Segoe UI", sans-serif;
 }
 
 .top-nav {
@@ -367,11 +367,15 @@ tr.clickable-row {
 }
 
 .status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.03em;
+  line-height: 1.2;
 }
 
 .status-waiting,
@@ -393,6 +397,32 @@ tr.clickable-row {
 .status-completed {
   background: #8df7c1;
   color: #005235;
+}
+
+/* Derived journey phases while API status stays CONSULTING */
+.visit-phase-postconsult {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.visit-phase-billing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.visit-phase-labqueue {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.visit-phase-labtest {
+  background: #bfdbfe;
+  color: #1e40af;
+}
+
+.visit-phase-postlab {
+  background: #d1fae5;
+  color: #047857;
 }
 
 .action-group {
@@ -419,6 +449,14 @@ tr.clickable-row {
   min-width: 26px;
   padding: 0 2px;
   background: transparent;
+}
+
+.action-group button.action-complete-visit {
+  background: #059669;
+}
+
+.action-group button.action-complete-visit .action-icon {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .action-icon {
@@ -482,7 +520,7 @@ tr.clickable-row {
 
 
 .token-create-page {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 .token-search-card {
@@ -560,8 +598,30 @@ tr.clickable-row {
   font-weight: 700;
 }
 
+.token-type-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.token-type-filter-head select {
+  width: auto;
+  max-width: 120px;
+  margin: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
 .token-search-table td .visit-type-pill {
   margin-left: 0;
+}
+
+.token-search-table :is(td, th):nth-child(8),
+.token-search-table :is(td, th):nth-child(10),
+.token-search-table :is(td, th):nth-child(11) {
+  display: none;
 }
 
 .token-search-table button {
@@ -638,56 +698,85 @@ tr.clickable-row {
   max-width: 620px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+  padding: 22px 24px;
 }
 
 .token-modal-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .token-modal-header h3 {
   margin: 0;
-  font-size: 26px;
+  font-size: 34px;
   letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.token-modal-subtitle {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .token-modal-form {
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
 .token-modal-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 
 .token-modal-grid label {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
-  margin-top: 2px;
+  color: #334155;
+  margin-top: 0;
 }
 
-.token-modal-grid input {
+.token-modal-grid input,
+.token-modal-grid select {
   height: 44px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  margin: 0 0 4px;
-  font-size: 22px;
+  border: 1px solid #dbe2ea;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
 }
 
-.token-modal-grid input[readonly] {
+.token-modal-grid select {
+  font-weight: 600;
+}
+
+.token-modal-readonly-grid {
   background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.token-readonly-input,
+.token-modal-grid input[readonly] {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
   color: #0f172a;
+  cursor: not-allowed;
 }
 
 .token-modal-note {
-  margin: 6px 0 14px;
+  margin: 2px 0 8px;
   color: #475569;
+  font-size: 13px;
 }
 
 .token-modal-actions {
@@ -797,9 +886,10 @@ tr.clickable-row {
 .detail-header {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
   align-items: flex-start;
+  gap: 16px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .patient-hero {
@@ -854,7 +944,7 @@ tr.clickable-row {
   flex-wrap: wrap;
 }
 
-.patient-tags span {
+.patient-tags span:not(.status-chip) {
   background: #f1f5f9;
   color: #334155;
   font-size: 11px;
@@ -865,8 +955,33 @@ tr.clickable-row {
 
 .detail-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+
+.detail-actions button {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.detail-actions .btn-secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.detail-actions .btn-complete-visit {
+  background: #059669;
+  color: #fff;
+}
+
+.detail-actions .btn-complete-visit:disabled {
+  opacity: 0.45;
 }
 
 .detail-grid {
@@ -884,8 +999,50 @@ tr.clickable-row {
 
 .detail-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   gap: 10px;
+}
+
+.detail-stats .card {
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.detail-stat-metric {
+  margin: 6px 0 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-stat-datetime {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #1e293b;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.end-consult-labs-label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.end-consult-labs-label input {
+  margin-top: 3px;
+  width: auto;
 }
 
 .detail-stats .card p {
@@ -897,20 +1054,13 @@ tr.clickable-row {
   font-weight: 700;
 }
 
-.detail-stats .card h3 {
-  margin: 8px 0 0;
-  font-size: 34px;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-weight: 800;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
 .detail-stats .card small {
+  display: block;
+  margin-top: 6px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .vitals-grid {
@@ -950,6 +1100,12 @@ tr.clickable-row {
 .journey-step {
   display: flex;
   gap: 10px;
+  align-items: flex-start;
+}
+
+.journey-step-body {
+  min-width: 0;
+  flex: 1;
 }
 
 .journey-step .dot {
@@ -979,6 +1135,14 @@ tr.clickable-row {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 12px;
+}
+
+.journey-step-time {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  font-weight: 500;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .urgent-list {
@@ -1330,11 +1494,10 @@ tr.clickable-row {
 }
 
 .step-back-preview-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px 16px;
+  align-items: start;
 }
 
 .step-back-preview-status > div {
@@ -1354,10 +1517,16 @@ tr.clickable-row {
 }
 
 .step-back-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 32px;
   font-size: 22px;
   font-weight: 700;
   color: #94a3b8;
   flex-shrink: 0;
+  /* Keeps the arrow vertically centered in the row while status columns stay top-aligned */
 }
 
 .step-back-detail {
@@ -1368,25 +1537,74 @@ tr.clickable-row {
 }
 
 .step-back-preview-sub {
+  display: block;
+  margin-top: 2px;
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
+  line-height: 1.35;
 }
 
+/* Grid: checkbox column + text column — avoids flex anonymous text collapsing to ~0 width */
 .step-back-checkbox-label {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   gap: 10px;
-  align-items: flex-start;
+  align-items: start;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 14px 0 4px;
   font-size: 13px;
   font-weight: 600;
   color: #334155;
+  line-height: 1.4;
   cursor: pointer;
 }
 
+.consult-modal-form .step-back-checkbox-label {
+  /* Override generic `.consult-modal-form label` (margin / weight) for this row */
+  margin-bottom: 0;
+  font-weight: 600;
+}
+
 .step-back-checkbox-label input {
-  margin-top: 2px;
+  margin-top: 0.2em;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+}
+
+.step-back-checkbox-text {
+  min-width: 0;
+}
+
+.revert-modal .revert-anchor-field {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin: 8px 0 6px;
+}
+
+.revert-anchor-select {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.revert-hint.muted {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 @media (max-width: 860px) {

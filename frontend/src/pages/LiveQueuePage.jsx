@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { StepBackConfirmModal } from "../components/StepBackConfirmModal";
+import { RevertConfirmModal } from "../components/RevertConfirmModal";
 import { fetchActiveDepartments } from "../services/departmentService";
-import { getStepBackPreview } from "../utils/stepBackPreview";
+import { canRevertVisit } from "../utils/revertAnchors";
 import {
+  completeVisitAfterConsultRequest,
   endCareRequest,
   endConsultRequest,
   fetchLiveQueue,
   startCareRequest,
   startConsultRequest,
-  stepBackRequest
+  revertTokenRequest
 } from "../services/tokenService";
+import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
 
 const formatDateTime = (value = null) => {
   if (!value) {
@@ -23,7 +25,6 @@ const formatDateTime = (value = null) => {
   return date.toLocaleString();
 };
 
-const formatMinutes = (value = null) => (value == null ? "-" : `${value} min`);
 const normalizeTokenId = (value = "") => String(value ?? "").replace(/^\/+|\/+$/g, "");
 
 export const LiveQueuePage = () => {
@@ -35,15 +36,118 @@ export const LiveQueuePage = () => {
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState("");
   const [consultStartModal, setConsultStartModal] = useState({ tokenId: "", department: "" });
-  const [confirmAction, setConfirmAction] = useState({ tokenId: "", action: "" });
+  const [confirmAction, setConfirmAction] = useState({ tokenId: "", action: "", labsOrdered: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [departmentCatalog, setDepartmentCatalog] = useState([]);
   const [stepBackRow, setStepBackRow] = useState(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const consultDepartmentOptions = useMemo(
     () => departmentCatalog.map((d) => d.name).filter(Boolean),
     [departmentCatalog]
   );
+
+  const toSecondsFromMinutes = (value = null) => {
+    if (value == null) {
+      return null;
+    }
+    return Math.max(0, Math.round(Number(value) * 60));
+  };
+
+  const toSecondsFromRange = (start = null, end = null) => {
+    if (!start) {
+      return null;
+    }
+    const startMs = new Date(start).getTime();
+    if (Number.isNaN(startMs)) {
+      return null;
+    }
+    const endMs = end ? new Date(end).getTime() : nowMs;
+    if (Number.isNaN(endMs)) {
+      return null;
+    }
+    return Math.max(0, Math.floor((endMs - startMs) / 1000));
+  };
+
+  const formatSeconds = (totalSeconds = null) => {
+    if (totalSeconds == null) {
+      return "-";
+    }
+    const safe = Math.max(0, Number(totalSeconds) || 0);
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const seconds = safe % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds}s`;
+    }
+    return `${minutes}m ${seconds}s`;
+  };
+
+  const getTatSeconds = (row = {}, key = "waiting") => {
+    if (key === "waiting") {
+      return toSecondsFromRange(
+        row.waiting_start,
+        row.consult_start ?? (row.status === "WAITING" ? null : row.consult_start)
+      ) ?? toSecondsFromMinutes(row.waiting_tat_minutes);
+    }
+    if (key === "consult") {
+      return toSecondsFromRange(
+        row.consult_start,
+        row.consult_end ?? (row.status === "CONSULTING" ? null : row.consult_end)
+      ) ?? toSecondsFromMinutes(row.consulting_tat_minutes);
+    }
+    if (key === "treatment") {
+      const start = resolveEffectiveTreatmentStart(row.treatment_start, row.consult_end);
+      if (!start) {
+        return null;
+      }
+      return (
+        toSecondsFromRange(
+          start,
+          row.treatment_end ?? (row.status === "IN_TREATMENT" ? null : row.treatment_end)
+        ) ?? toSecondsFromMinutes(row.treatment_tat_minutes)
+      );
+    }
+    if (key === "billing") {
+      if (!row.billing_start) {
+        return null;
+      }
+      return (
+        toSecondsFromRange(
+          row.billing_start,
+          row.billing_end ?? (row.status === "CONSULTING" && !row.billing_end ? null : row.billing_end)
+        ) ?? toSecondsFromMinutes(row.billing_tat_minutes)
+      );
+    }
+    if (key === "lab_wait") {
+      if (!row.billing_end) {
+        return null;
+      }
+      return (
+        toSecondsFromRange(
+          row.billing_end,
+          row.lab_start ?? (row.status === "CONSULTING" && !row.lab_start ? null : row.lab_start)
+        ) ?? toSecondsFromMinutes(row.lab_wait_tat_minutes)
+      );
+    }
+    if (key === "lab_test") {
+      if (!row.lab_start) {
+        return null;
+      }
+      return (
+        toSecondsFromRange(
+          row.lab_start,
+          row.lab_end ?? (row.status === "CONSULTING" && !row.lab_end ? null : row.lab_end)
+        ) ?? toSecondsFromMinutes(row.lab_test_tat_minutes)
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
     fetchActiveDepartments()
@@ -83,12 +187,12 @@ export const LiveQueuePage = () => {
     });
   };
 
-  const openConfirmAction = (tokenId = "", action = "") => {
-    setConfirmAction({ tokenId, action });
+  const openConfirmAction = (tokenId = "", action = "", labsOrdered = false) => {
+    setConfirmAction({ tokenId, action, labsOrdered });
   };
 
   const closeConsultStartModal = () => setConsultStartModal({ tokenId: "", department: "" });
-  const closeConfirmAction = () => setConfirmAction({ tokenId: "", action: "" });
+  const closeConfirmAction = () => setConfirmAction({ tokenId: "", action: "", labsOrdered: false });
 
   const handleStartConsulting = async () => {
     if (!consultStartModal.tokenId) {
@@ -123,11 +227,13 @@ export const LiveQueuePage = () => {
     setRequestError("");
     try {
       if (action === "end_consult") {
-        await endConsultRequest(tokenId);
+        await endConsultRequest(tokenId, { labs_ordered: Boolean(confirmAction.labsOrdered) });
       } else if (action === "start_treatment") {
         await startCareRequest(tokenId);
       } else if (action === "end_treatment") {
         await endCareRequest(tokenId);
+      } else if (action === "complete_visit") {
+        await completeVisitAfterConsultRequest(tokenId);
       }
       closeConfirmAction();
       await loadQueue();
@@ -138,27 +244,27 @@ export const LiveQueuePage = () => {
     }
   };
 
-  const openStepBackModal = (row = null) => {
-    if (!getStepBackPreview(row).canStep) {
+  const openRevertModal = (row = null) => {
+    if (!canRevertVisit(row)) {
       return;
     }
     setStepBackRow(row);
   };
 
-  const closeStepBackModal = () => setStepBackRow(null);
+  const closeRevertModal = () => setStepBackRow(null);
 
-  const executeStepBack = async (tokenId = "") => {
-    if (!tokenId) {
+  const executeRevert = async (tokenId = "", anchor = "") => {
+    if (!tokenId || !String(anchor ?? "").trim()) {
       return;
     }
     setIsSubmitting(true);
     setRequestError("");
     try {
-      await stepBackRequest(tokenId);
+      await revertTokenRequest(tokenId, anchor);
       setStepBackRow(null);
       await loadQueue();
     } catch (actionError) {
-      setRequestError(actionError?.message ?? "Unable to step back");
+      setRequestError(actionError?.message ?? "Unable to revert");
     } finally {
       setIsSubmitting(false);
     }
@@ -246,10 +352,10 @@ export const LiveQueuePage = () => {
                   <td>{row.phone || "—"}</td>
                   <td>{row.visit_id}</td>
                   <td>{row.department}</td>
-                  <td>{formatMinutes(row.waiting_tat_minutes)}</td>
+                  <td>{formatSeconds(getTatSeconds(row, "waiting"))}</td>
                   <td>
                     <div className="tat-cell">
-                      <strong>{formatMinutes(row.consulting_tat_minutes)}</strong>
+                      <strong>{formatSeconds(getTatSeconds(row, "consult"))}</strong>
                       {row.consulting_tat_minutes != null ? (
                         <div className="tat-hover">
                           <span className="info-icon" title="Show consult start/end">
@@ -265,7 +371,7 @@ export const LiveQueuePage = () => {
                   </td>
                   <td>
                     <div className="tat-cell">
-                      <strong>{formatMinutes(row.treatment_tat_minutes)}</strong>
+                      <strong>{formatSeconds(getTatSeconds(row, "treatment"))}</strong>
                       {row.treatment_tat_minutes != null ? (
                         <div className="tat-hover">
                           <span className="info-icon" title="Show treatment start/end">
@@ -279,7 +385,14 @@ export const LiveQueuePage = () => {
                       ) : null}
                     </div>
                   </td>
-                  <td>{formatMinutes(row.overall_tat_minutes)}</td>
+                  <td>
+                    {formatSeconds(
+                      ["waiting", "consult", "billing", "lab_wait", "lab_test", "treatment"]
+                        .map((k) => getTatSeconds(row, k))
+                        .filter((v) => v != null)
+                        .reduce((sum, v) => sum + v, 0)
+                    )}
+                  </td>
                   <td>
                     <span className={`status-chip status-${String(row.status).toLowerCase()}`}>
                       {row.status}
@@ -299,32 +412,40 @@ export const LiveQueuePage = () => {
                       >
                         <span className="action-icon">SC</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => openConfirmAction(row.token_id, "end_consult")}
-                        disabled={isSubmitting || row.status !== "CONSULTING"}
-                        title="End Consulting"
-                        aria-label="End Consulting"
-                      >
-                        <span className="action-icon">EC</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openConfirmAction(row.token_id, "start_treatment")}
-                        disabled={
-                          isSubmitting ||
-                          row.status !== "CONSULTING" ||
-                          !row.consult_end
-                        }
-                        title={
-                          row.status === "CONSULTING" && !row.consult_end
-                            ? "End consultation before starting treatment"
-                            : "Start Treatment"
-                        }
-                        aria-label="Start Treatment"
-                      >
-                        <span className="action-icon">ST</span>
-                      </button>
+                      {row.status === "CONSULTING" && !row.consult_end ? (
+                        <button
+                          type="button"
+                          onClick={() => openConfirmAction(row.token_id, "end_consult")}
+                          disabled={isSubmitting}
+                          title="End Consulting"
+                          aria-label="End Consulting"
+                        >
+                          <span className="action-icon">EC</span>
+                        </button>
+                      ) : null}
+                      {row.status === "CONSULTING" && row.consult_end ? (
+                        <button
+                          type="button"
+                          onClick={() => openConfirmAction(row.token_id, "start_treatment")}
+                          disabled={isSubmitting}
+                          title="Start Treatment"
+                          aria-label="Start Treatment"
+                        >
+                          <span className="action-icon">ST</span>
+                        </button>
+                      ) : null}
+                      {row.status === "CONSULTING" && row.consult_end && !row.treatment_start ? (
+                        <button
+                          type="button"
+                          className="action-complete-visit"
+                          onClick={() => openConfirmAction(row.token_id, "complete_visit")}
+                          disabled={isSubmitting}
+                          title="Complete visit (consult only)"
+                          aria-label="Complete visit"
+                        >
+                          <span className="action-icon">CV</span>
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => openConfirmAction(row.token_id, "end_treatment")}
@@ -337,14 +458,14 @@ export const LiveQueuePage = () => {
                       <button
                         type="button"
                         className="action-back"
-                        onClick={() => openStepBackModal(row)}
+                        onClick={() => openRevertModal(row)}
                         disabled={
                           isSubmitting ||
                           row.status === "WAITING" ||
-                          !getStepBackPreview(row).canStep
+                          !canRevertVisit(row)
                         }
-                        title="Step back one stage"
-                        aria-label="Step back one stage"
+                        title="Revert to an earlier journey step"
+                        aria-label="Revert to an earlier journey step"
                       >
                         <span className="action-icon" aria-hidden>
                           ←
@@ -359,10 +480,10 @@ export const LiveQueuePage = () => {
         </article>
       ) : null}
 
-      <StepBackConfirmModal
+      <RevertConfirmModal
         row={stepBackRow}
-        onClose={closeStepBackModal}
-        onConfirm={executeStepBack}
+        onClose={closeRevertModal}
+        onConfirm={executeRevert}
         isSubmitting={isSubmitting}
       />
 
@@ -413,8 +534,22 @@ export const LiveQueuePage = () => {
                   ? "Are you sure you want to end consulting?"
                   : confirmAction.action === "start_treatment"
                     ? "Are you sure you want to start treatment?"
-                    : "Are you sure you want to end treatment?"}
+                    : confirmAction.action === "complete_visit"
+                      ? "Complete this visit with consultation only (no treatment)?"
+                      : "Are you sure you want to end treatment?"}
               </p>
+              {confirmAction.action === "end_consult" ? (
+                <label className="end-consult-labs-label">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(confirmAction.labsOrdered)}
+                    onChange={(event) =>
+                      setConfirmAction((prev) => ({ ...prev, labsOrdered: event.target.checked }))
+                    }
+                  />
+                  Labs / tests ordered — billing and lab steps required before treatment
+                </label>
+              ) : null}
               <div className="consult-modal-actions">
                 <button type="button" onClick={handleConfirmAction} disabled={isSubmitting}>
                   Yes, Confirm
