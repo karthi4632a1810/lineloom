@@ -55,31 +55,6 @@ h4,
   color: #1e3a8a;
 }
 
-.top-links {
-  display: flex;
-  gap: 12px;
-}
-
-.top-links a {
-  color: #64748b;
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-
-.top-links a:hover {
-  color: #1d4ed8;
-  background: #eff6ff;
-}
-
-.top-links a.active {
-  color: #1d4ed8;
-  background: #e8f0ff;
-  border-bottom: 2px solid #1d4ed8;
-}
-
 .header-search {
   width: 240px;
   border: 1px solid #e2e8f0;
@@ -224,7 +199,9 @@ h4,
 }
 
 .page {
+  width: 100%;
   max-width: 1400px;
+  margin: 0 auto;
 }
 
 .page h2 {
@@ -441,14 +418,21 @@ tr.clickable-row {
   border-radius: 10px;
 }
 
+.action-group button.action-back {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .action-group button.action-back .action-icon {
   font-size: 16px;
   font-weight: 900;
-  width: auto;
-  height: auto;
+  width: 26px;
+  height: 26px;
   min-width: 26px;
-  padding: 0 2px;
+  padding: 0;
   background: transparent;
+  color: #0f172a;
+  line-height: 1;
 }
 
 .action-group button.action-complete-visit {
@@ -1453,14 +1437,15 @@ tr.clickable-row {
 }
 
 .token-actions-cell {
-  vertical-align: top;
+  vertical-align: middle;
   min-width: 240px;
   max-width: 340px;
+  text-align: center;
 }
 
 .token-actions-cell .action-group {
-  align-items: flex-start;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: center;
 }
 
 .department-settings-form {

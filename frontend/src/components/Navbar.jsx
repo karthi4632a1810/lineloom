@@ -1,15 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
 
-const topLinks = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/patient-queue", label: "Patient Queue" },
-  { to: "/completed-queue", label: "Completed" },
-  { to: "/patient-detail", label: "Patient Detail" },
-  { to: "/create-token", label: "Create Token" },
-  { to: "/department-analytics", label: "Department Analytics" },
-  { to: "/schedules", label: "Schedules" }
-];
-
 const sideLinks = [
   { to: "/overview", label: "Overview", icon: "O" },
   { to: "/live-queue", label: "Live Queue", icon: "LQ" },
@@ -36,17 +26,6 @@ export const Navbar = () => {
       <header className="top-nav">
         <div className="top-nav-left">
           <span className="brand-title">Clinical Curator</span>
-          <div className="top-links">
-            {topLinks.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                {link.label}
-              </NavLink>
-            ))}
-          </div>
         </div>
         <div className="top-nav-right">
           <input className="header-search" placeholder="Search Patients..." />
