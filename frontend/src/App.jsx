@@ -5,6 +5,8 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { DepartmentAnalyticsPage } from "./pages/DepartmentAnalyticsPage";
+import { AlertsPage } from "./pages/AlertsPage";
 import { DepartmentSettingsPage } from "./pages/DepartmentSettingsPage";
 import { CompletedQueuePage } from "./pages/CompletedQueuePage";
 import { LiveQueuePage } from "./pages/LiveQueuePage";
@@ -68,6 +70,20 @@ export default function App() {
           }
         />
         <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <AlertsPage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/intelligence"
+          element={<Navigate to="/department-analytics" replace />}
+        />
+        <Route
           path="/patient-queue"
           element={
             <ProtectedRoute>
@@ -112,7 +128,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppLayout>
-                <PlaceholderPage title="Department Analytics" />
+                <DepartmentAnalyticsPage />
               </AppLayout>
             </ProtectedRoute>
           }

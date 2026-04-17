@@ -5,6 +5,8 @@ import { fetchActiveDepartments } from "../services/departmentService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
 import { canRevertVisit } from "../utils/revertAnchors";
 import { fetchDashboardSummary, fetchDashboardTokens } from "../services/dashboardService";
+import { fetchAlerts } from "../services/alertService";
+import { fetchIntelligenceSummary } from "../services/intelligenceService";
 import {
   completeVisitAfterConsultRequest,
   endCareRequest,
@@ -59,6 +61,8 @@ export const DashboardPage = () => {
   const [departmentCatalog, setDepartmentCatalog] = useState([]);
   const [stepBackRow, setStepBackRow] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [quickAlerts, setQuickAlerts] = useState([]);
+  const [intelligenceBrief, setIntelligenceBrief] = useState(null);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -182,12 +186,16 @@ export const DashboardPage = () => {
     setIsLoading(true);
     setError("");
     try {
-      const [summaryData, tokenRows] = await Promise.all([
+      const [summaryData, tokenRows, alerts, intel] = await Promise.all([
         fetchDashboardSummary(filters),
-        fetchDashboardTokens(filters)
+        fetchDashboardTokens(filters),
+        fetchAlerts({ limit: 5, unacknowledged_only: 1 }).catch(() => []),
+        fetchIntelligenceSummary().catch(() => null)
       ]);
       setSummary(summaryData);
       setRows(tokenRows);
+      setQuickAlerts(Array.isArray(alerts) ? alerts : []);
+      setIntelligenceBrief(intel);
     } catch (loadError) {
       setError(loadError?.message ?? "Failed to load dashboard");
     } finally {
@@ -304,6 +312,31 @@ export const DashboardPage = () => {
   return (
     <section className="page">
       <h2>Patient Queue Dashboard</h2>
+
+      {intelligenceBrief?.stats ? (
+        <div className="intel-strip card">
+          <p className="intel-strip-text">
+            <strong>7-day insight:</strong>{" "}
+            {intelligenceBrief.stats.anomaly
+              ? intelligenceBrief.stats.anomaly_reason
+              : `Mean daily average wait ${intelligenceBrief.stats.mean_7d_daily_avg_wait ?? "—"} min · naive forecast next day ${intelligenceBrief.forecast?.expected_avg_wait_minutes_next_day ?? "—"} min`}
+          </p>
+        </div>
+      ) : null}
+
+      {quickAlerts.length ? (
+        <div className="alert-strip" role="status">
+          {quickAlerts.map((a) => (
+            <div key={a._id} className="alert-pill">
+              <span>{a.message}</span>
+              <button type="button" className="btn-inline" onClick={() => navigate("/alerts")}>
+                Open alerts
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <form className="card filter-grid" onSubmit={handleApplyFilters}>
         <input
           type="datetime-local"

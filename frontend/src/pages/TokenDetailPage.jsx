@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { RevertConfirmModal } from "../components/RevertConfirmModal";
@@ -15,6 +15,7 @@ import {
   startLabRequest,
   revertTokenRequest
 } from "../services/tokenService";
+import { fetchTokenJourney } from "../services/journeyService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
 import { canRevertVisit, getVisitPhaseChipClass, getVisitPhaseLabel } from "../utils/revertAnchors";
 
@@ -170,6 +171,28 @@ export const TokenDetailPage = () => {
 
   const fetcher = useMemo(() => () => fetchTokenDetail(resolvedTokenId), [resolvedTokenId]);
   const { data, isLoading, error, reload } = useAsyncData(fetcher, [fetcher]);
+
+  const journeyFetcher = useMemo(
+    () => () => {
+      if (!resolvedTokenId) {
+        return Promise.resolve(null);
+      }
+      return fetchTokenJourney(resolvedTokenId);
+    },
+    [resolvedTokenId]
+  );
+  const {
+    data: journeyPayload,
+    isLoading: journeyLoading,
+    error: journeyError,
+    reload: reloadJourney
+  } = useAsyncData(journeyFetcher, [journeyFetcher]);
+
+  const refreshTokenViews = useCallback(async () => {
+    await reload();
+    await reloadJourney();
+  }, [reload, reloadJourney]);
+
   const [actionError, setActionError] = useState("");
   const [isActing, setIsActing] = useState(false);
   const [departmentCatalog, setDepartmentCatalog] = useState([]);
@@ -201,12 +224,12 @@ export const TokenDetailPage = () => {
     const onRefresh = (event) => {
       const id = event.detail?.tokenId;
       if (id != null && String(id) === String(resolvedTokenId)) {
-        reload();
+        refreshTokenViews();
       }
     };
     window.addEventListener("lineloom-token-refresh", onRefresh);
     return () => window.removeEventListener("lineloom-token-refresh", onRefresh);
-  }, [resolvedTokenId, reload]);
+  }, [resolvedTokenId, refreshTokenViews]);
 
   const queueRowForRevert = useMemo(() => {
     const t = data?.token;
@@ -349,6 +372,21 @@ export const TokenDetailPage = () => {
     }
   ];
 
+  const journeyFromApi =
+    journeyPayload?.timeline?.length && !journeyError
+      ? journeyPayload.timeline.map((seg) => ({
+          label: seg.label,
+          timePrimary: seg.in_progress
+            ? "In progress"
+            : seg.duration_minutes != null
+              ? `${seg.duration_minutes} min`
+              : "--",
+          timeSecondary: `${formatDateTime(seg.start)}${seg.end ? ` → ${formatDateTime(seg.end)}` : ""}`,
+          done: Boolean(seg.end) && !seg.in_progress,
+          active: Boolean(seg.in_progress)
+        }))
+      : null;
+
   const runTokenAction = async (action = "start_consult") => {
     const id = String(token?.token_id ?? resolvedTokenId ?? "");
     if (!id) {
@@ -384,7 +422,7 @@ export const TokenDetailPage = () => {
       } else if (action === "end_lab") {
         await endLabRequest(id);
       }
-      await reload();
+      await refreshTokenViews();
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to update token state");
@@ -404,7 +442,7 @@ export const TokenDetailPage = () => {
       await endConsultRequest(id, { labs_ordered: endConsultLabsOrdered });
       setShowEndConsultConfirm(false);
       setEndConsultLabsOrdered(false);
-      await reload();
+      await refreshTokenViews();
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to end consultation");
@@ -423,7 +461,7 @@ export const TokenDetailPage = () => {
     try {
       await completeVisitAfterConsultRequest(id);
       setShowCompleteVisitConfirm(false);
-      await reload();
+      await refreshTokenViews();
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to complete visit");
@@ -448,7 +486,7 @@ export const TokenDetailPage = () => {
     try {
       await revertTokenRequest(id, anchor);
       setStepBackRow(null);
-      await reload();
+      await refreshTokenViews();
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to revert");
@@ -471,7 +509,7 @@ export const TokenDetailPage = () => {
     try {
       await startConsultRequest(id, { department: consultDept });
       setShowConsultModal(false);
-      await reload();
+      await refreshTokenViews();
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to start consultation");
     } finally {
@@ -791,8 +829,10 @@ export const TokenDetailPage = () => {
         <aside className="detail-side">
           <section className="card">
             <h3>Patient Journey</h3>
+            {journeyLoading ? <p className="muted-inline">Updating timeline…</p> : null}
+            {journeyError ? <p className="error-text">{journeyError}</p> : null}
             <div className="journey-list">
-              {timeline.map((step, index) => (
+              {(journeyFromApi ?? timeline).map((step, index) => (
                 <div
                   key={`${step.label}-${index}`}
                   className={`journey-step ${step.active ? "active" : ""}`}
@@ -800,7 +840,10 @@ export const TokenDetailPage = () => {
                   <span className={`dot ${step.done ? "done" : ""}`}>{step.done ? "✓" : ""}</span>
                   <div className="journey-step-body">
                     <strong>{step.label}</strong>
-                    <p className="journey-step-time">{step.time}</p>
+                    <p className="journey-step-time">{step.timePrimary ?? step.time}</p>
+                    {step.timeSecondary ? (
+                      <p className="journey-step-sub">{step.timeSecondary}</p>
+                    ) : null}
                   </div>
                 </div>
               ))}

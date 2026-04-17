@@ -8,6 +8,7 @@ import {
   endLab,
   getCompletedTokensHandler,
   getLiveQueueHandler,
+  getTokenJourneyHandler,
   getTokenDetailHandler,
   recordBillingPaymentHandler,
   startCare,
@@ -25,6 +26,7 @@ router.use(requireAuth);
 
 router.get("/queue/live", getLiveQueueHandler);
 router.get("/queue/completed", getCompletedTokensHandler);
+router.get("/:id/journey", getTokenJourneyHandler);
 router.post(
   "/:id/step-back",
   authorizeRoles("admin", "doctor", "nurse"),

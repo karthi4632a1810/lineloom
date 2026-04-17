@@ -6,7 +6,14 @@ import {
   updateDepartmentRequest
 } from "../services/departmentService";
 
-const emptyForm = { name: "", sort_order: 0, is_active: true };
+const emptyForm = {
+  name: "",
+  sort_order: 0,
+  is_active: true,
+  max_wait_minutes: "",
+  max_queue_depth: "",
+  max_lab_stuck_minutes: ""
+};
 
 export const DepartmentSettingsPage = () => {
   const [rows, setRows] = useState([]);
@@ -41,10 +48,14 @@ export const DepartmentSettingsPage = () => {
 
   const startEdit = (row = {}) => {
     setEditingId(row._id ?? "");
+    const rules = row.alert_rules ?? {};
     setForm({
       name: row.name ?? "",
       sort_order: row.sort_order ?? 0,
-      is_active: row.is_active !== false
+      is_active: row.is_active !== false,
+      max_wait_minutes: rules.max_wait_minutes ?? "",
+      max_queue_depth: rules.max_queue_depth ?? "",
+      max_lab_stuck_minutes: rules.max_lab_stuck_minutes ?? ""
     });
   };
 
@@ -58,17 +69,25 @@ export const DepartmentSettingsPage = () => {
     setIsSaving(true);
     setError("");
     try {
+      const alert_rules = {
+        max_wait_minutes: form.max_wait_minutes === "" ? null : Number(form.max_wait_minutes),
+        max_queue_depth: form.max_queue_depth === "" ? null : Number(form.max_queue_depth),
+        max_lab_stuck_minutes:
+          form.max_lab_stuck_minutes === "" ? null : Number(form.max_lab_stuck_minutes)
+      };
       if (editingId) {
         await updateDepartmentRequest(editingId, {
           name,
           sort_order: Number(form.sort_order) || 0,
-          is_active: Boolean(form.is_active)
+          is_active: Boolean(form.is_active),
+          alert_rules
         });
       } else {
         await createDepartmentRequest({
           name,
           sort_order: Number(form.sort_order) || 0,
-          is_active: form.is_active !== false
+          is_active: form.is_active !== false,
+          alert_rules
         });
       }
       setForm(emptyForm);
@@ -134,6 +153,44 @@ export const DepartmentSettingsPage = () => {
             />
             Active (shown in lists)
           </label>
+          <h4 className="rules-heading">Alert rules (optional)</h4>
+          <p className="live-queue-lead">
+            When set, the API evaluates the live queue and raises alerts (see Alerts page). Leave blank to
+            disable that check.
+          </p>
+          <label htmlFor="rule_wait">Max wait (minutes)</label>
+          <input
+            id="rule_wait"
+            type="number"
+            min="0"
+            placeholder="e.g. 45"
+            value={form.max_wait_minutes}
+            onChange={(event) =>
+              setForm((previous) => ({ ...previous, max_wait_minutes: event.target.value }))
+            }
+          />
+          <label htmlFor="rule_depth">Max queue depth (active tokens)</label>
+          <input
+            id="rule_depth"
+            type="number"
+            min="0"
+            placeholder="e.g. 12"
+            value={form.max_queue_depth}
+            onChange={(event) =>
+              setForm((previous) => ({ ...previous, max_queue_depth: event.target.value }))
+            }
+          />
+          <label htmlFor="rule_lab">Max lab testing duration (minutes)</label>
+          <input
+            id="rule_lab"
+            type="number"
+            min="0"
+            placeholder="e.g. 30"
+            value={form.max_lab_stuck_minutes}
+            onChange={(event) =>
+              setForm((previous) => ({ ...previous, max_lab_stuck_minutes: event.target.value }))
+            }
+          />
           <div className="department-settings-actions">
             <button type="submit" disabled={isSaving}>
               {isSaving ? "Saving…" : editingId ? "Update" : "Create"}
