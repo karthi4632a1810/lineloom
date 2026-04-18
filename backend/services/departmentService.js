@@ -37,6 +37,21 @@ export const isActiveDepartmentName = async (name = "") => {
   return Boolean(doc);
 };
 
+const normalizeAlertRules = (raw = {}) => ({
+  max_wait_minutes:
+    raw.max_wait_minutes != null && raw.max_wait_minutes !== ""
+      ? Number(raw.max_wait_minutes)
+      : null,
+  max_queue_depth:
+    raw.max_queue_depth != null && raw.max_queue_depth !== ""
+      ? Number(raw.max_queue_depth)
+      : null,
+  max_lab_stuck_minutes:
+    raw.max_lab_stuck_minutes != null && raw.max_lab_stuck_minutes !== ""
+      ? Number(raw.max_lab_stuck_minutes)
+      : null
+});
+
 export const createDepartment = async (input = {}) => {
   const name = String(input?.name ?? "").trim();
   if (!name) {
@@ -46,7 +61,8 @@ export const createDepartment = async (input = {}) => {
     const created = await Department.create({
       name,
       sort_order: Number(input?.sort_order ?? 0) || 0,
-      is_active: input?.is_active !== false
+      is_active: input?.is_active !== false,
+      alert_rules: normalizeAlertRules(input?.alert_rules ?? {})
     });
     return created.toObject();
   } catch (error) {
@@ -70,6 +86,9 @@ export const updateDepartment = async (id = "", input = {}) => {
   }
   if (input.is_active != null) {
     doc.is_active = Boolean(input.is_active);
+  }
+  if (input.alert_rules != null) {
+    doc.alert_rules = normalizeAlertRules(input.alert_rules);
   }
   try {
     await doc.save();

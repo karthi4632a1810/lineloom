@@ -19,6 +19,7 @@ import {
   revertTokenToAnchor,
   stepBackToken
 } from "../services/tokenService.js";
+import { getTokenJourney } from "../services/journeyService.js";
 
 const createTokenSchema = z.object({
   patient_id: z.string().min(1),
@@ -134,4 +135,9 @@ export const getCompletedTokensHandler = asyncHandler(async (req, res) => {
 export const getTokenDetailHandler = asyncHandler(async (req, res) => {
   const detail = await getTokenDetail(getTokenId(req));
   return sendSuccess(res, detail, "Token detail fetched");
+});
+
+export const getTokenJourneyHandler = asyncHandler(async (req, res) => {
+  const journey = await getTokenJourney(getTokenId(req));
+  return sendSuccess(res, journey, "Token journey fetched");
 });

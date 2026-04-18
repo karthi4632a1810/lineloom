@@ -11,7 +11,7 @@ const tokenSchema = new mongoose.Schema(
     parent_token_id: { type: String, default: null, index: true },
     status: {
       type: String,
-      enum: ["WAITING", "CONSULTING", "IN_TREATMENT", "COMPLETED"],
+      enum: ["WAITING", "ACTIVE", "CONSULTING", "IN_TREATMENT", "COMPLETED"],
       default: "WAITING"
     }
   },

@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 const sideLinks = [
   { to: "/overview", label: "Overview", icon: "O" },
+  { to: "/department-analytics", label: "Data analysis", icon: "DA" },
   { to: "/live-queue", label: "Live Queue", icon: "LQ" },
   { to: "/completed-queue", label: "Completed", icon: "CP" },
   { to: "/create-token", label: "Create Token", icon: "CT" },

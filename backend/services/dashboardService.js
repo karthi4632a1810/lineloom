@@ -25,7 +25,7 @@ const parseDateOrDefault = (value = "", fallback = null) => {
   return parsed;
 };
 
-const resolveTimeRange = async (filters = {}) => {
+export const resolveTimeRange = async (filters = {}) => {
   const tokens = await Token.find({
     created_at: {
       $gte: parseDateOrDefault(filters?.from, getTodayRange().start),
@@ -81,6 +81,11 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     tracking.care_end,
     status === "IN_TREATMENT"
   );
+  const breakTat = minutesBetween(
+    tracking.break_start,
+    tracking.break_end,
+    Boolean(tracking.break_start) && !tracking.break_end
+  );
   const overall = [waiting, consulting, billing, labWait, labTest, treatment]
     .filter((value) => value != null)
     .reduce((sum, value) => sum + value, 0);
@@ -91,6 +96,7 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     lab_wait_tat_minutes: labWait,
     lab_test_tat_minutes: labTest,
     treatment_tat_minutes: treatment,
+    break_tat_minutes: breakTat,
     overall_tat_minutes: Number(overall.toFixed(2))
   };
 };
