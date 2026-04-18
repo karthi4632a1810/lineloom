@@ -200,7 +200,7 @@ h4,
 
 .page {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1450px;
   margin: 0 auto;
 }
 
@@ -305,6 +305,12 @@ textarea {
 
 .table-card {
   overflow-x: auto;
+}
+
+.table-card th.col-tat,
+.table-card td.col-tat {
+  min-width: 8rem;
+  box-sizing: border-box;
 }
 
 table {
@@ -504,7 +510,7 @@ tr.clickable-row {
 
 
 .token-create-page {
-  max-width: 1400px;
+  max-width: 1450px;
   margin: 0 auto;
 }
 .token-search-card {

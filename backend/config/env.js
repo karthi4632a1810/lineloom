@@ -10,6 +10,8 @@ const parseBoolean = (value, fallback = false) => {
 };
 
 export const env = {
+  /** When false, HIS/SQL Server is never contacted (empty search, no pool connect). Default true. */
+  hisEnabled: parseBoolean(process.env.HIS_ENABLED, true),
   port: Number(process.env.PORT ?? 5000),
   mongoUri:
     process.env.MONGO_URI ??

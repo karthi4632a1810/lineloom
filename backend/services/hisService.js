@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import { getHisPool, sql } from "../config/sqlServer.js";
 import { ApiError } from "../utils/apiError.js";
 import { logger } from "../utils/logger.js";
@@ -300,6 +301,9 @@ const getLookupMeta = async () => {
 };
 
 export const fetchHisPatients = async () => {
+  if (!env.hisEnabled) {
+    return [];
+  }
   const cacheKey = "his:patients:today";
   const cached = getCache(cacheKey);
   if (cached) {
@@ -361,6 +365,9 @@ export const fetchHisPatients = async () => {
  * @param {{ name?: string, reg_no?: string, date_from?: string, date_to?: string }} filters
  */
 export const searchHisPatients = async (filters = {}) => {
+  if (!env.hisEnabled) {
+    return [];
+  }
   const name = String(filters.name ?? "").trim();
   const regNo = String(filters.reg_no ?? "").trim();
   const dateFrom = String(filters.date_from ?? "").trim();
@@ -602,6 +609,9 @@ export const fetchPatientDemographics = async (patientIds = []) => {
 };
 
 export const checkPatientExistsInHis = async (patientId = "", visitId = "") => {
+  if (!env.hisEnabled) {
+    return true;
+  }
   const id = String(patientId ?? "").trim();
   const visit = String(visitId ?? "").trim();
   const cacheKey = `his:exists:${id}:${visit}`;

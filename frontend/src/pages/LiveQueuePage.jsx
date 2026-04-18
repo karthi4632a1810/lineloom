@@ -314,10 +314,10 @@ export const LiveQueuePage = () => {
                 <th>Phone</th>
                 <th>Visit ID</th>
                 <th>Department</th>
-                <th>Waiting TAT</th>
-                <th>Consult TAT</th>
-                <th>Treatment TAT</th>
-                <th>Overall TAT</th>
+                <th className="col-tat">Waiting TAT</th>
+                <th className="col-tat">Consult TAT</th>
+                <th className="col-tat">Treatment TAT</th>
+                <th className="col-tat">Overall TAT</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -352,8 +352,8 @@ export const LiveQueuePage = () => {
                   <td>{row.phone || "—"}</td>
                   <td>{row.visit_id}</td>
                   <td>{row.department}</td>
-                  <td>{formatSeconds(getTatSeconds(row, "waiting"))}</td>
-                  <td>
+                  <td className="col-tat">{formatSeconds(getTatSeconds(row, "waiting"))}</td>
+                  <td className="col-tat">
                     <div className="tat-cell">
                       <strong>{formatSeconds(getTatSeconds(row, "consult"))}</strong>
                       {row.consulting_tat_minutes != null ? (
@@ -369,7 +369,7 @@ export const LiveQueuePage = () => {
                       ) : null}
                     </div>
                   </td>
-                  <td>
+                  <td className="col-tat">
                     <div className="tat-cell">
                       <strong>{formatSeconds(getTatSeconds(row, "treatment"))}</strong>
                       {row.treatment_tat_minutes != null ? (
@@ -385,7 +385,7 @@ export const LiveQueuePage = () => {
                       ) : null}
                     </div>
                   </td>
-                  <td>
+                  <td className="col-tat">
                     {formatSeconds(
                       ["waiting", "consult", "billing", "lab_wait", "lab_test", "treatment"]
                         .map((k) => getTatSeconds(row, k))

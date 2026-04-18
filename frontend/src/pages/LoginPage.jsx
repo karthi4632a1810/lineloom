@@ -75,8 +75,7 @@ export const LoginPage = () => {
           <div className="login-alert" role="status">
             <span className="login-alert-title">Session ended</span>
             <p>
-              Your session expired or the token is invalid. Please sign in again to search HIS
-              patients.
+              Your session expired or the token is invalid. Please sign in again to continue.
             </p>
           </div>
         ) : null}

@@ -101,10 +101,10 @@ export const CompletedQueuePage = () => {
                 <th>Phone</th>
                 <th>Visit ID</th>
                 <th>Department</th>
-                <th>Waiting TAT</th>
-                <th>Consult TAT</th>
-                <th>Treatment TAT</th>
-                <th>Overall TAT</th>
+                <th className="col-tat">Waiting TAT</th>
+                <th className="col-tat">Consult TAT</th>
+                <th className="col-tat">Treatment TAT</th>
+                <th className="col-tat">Overall TAT</th>
                 <th>Completed At</th>
                 <th>Status</th>
               </tr>
@@ -127,10 +127,10 @@ export const CompletedQueuePage = () => {
                   <td>{row.phone || "—"}</td>
                   <td>{row.visit_id}</td>
                   <td>{row.department}</td>
-                  <td>{formatSeconds(toSecondsFromMinutes(row.waiting_tat_minutes))}</td>
-                  <td>{formatSeconds(toSecondsFromMinutes(row.consulting_tat_minutes))}</td>
-                  <td>{formatSeconds(toSecondsFromMinutes(row.treatment_tat_minutes))}</td>
-                  <td>{formatSeconds(toSecondsFromMinutes(row.overall_tat_minutes))}</td>
+                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.waiting_tat_minutes))}</td>
+                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.consulting_tat_minutes))}</td>
+                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.treatment_tat_minutes))}</td>
+                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.overall_tat_minutes))}</td>
                   <td>{formatDateTime(row.treatment_end)}</td>
                   <td>
                     <span className="status-chip status-completed">COMPLETED</span>
