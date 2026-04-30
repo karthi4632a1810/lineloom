@@ -7,13 +7,20 @@ import {
   createToken,
   endConsulting,
   endLabTesting,
+  endPharmacyPhase,
   endTreatment,
   getLiveQueue,
   getCompletedTokens,
   getTokenDetail,
   moveTokenToWaiting,
   recordBillingPayment,
+  endBillingPhase,
+  startBillingPhase,
+  startPharmacyPhase,
+  stopBillingPhase,
+  stopPharmacyPhase,
   startConsulting,
+  orderLabsAfterConsult,
   startLabTesting,
   startTreatment,
   revertTokenToAnchor,
@@ -38,11 +45,18 @@ const startConsultSchema = z.object({
 const endConsultSchema = z.object({
   consult_note: z.string().optional(),
   next_department: z.string().optional(),
-  labs_ordered: z.boolean().optional()
+  labs_ordered: z.boolean().optional(),
+  post_consult_plans: z.array(z.enum(["labs", "treatment", "pharmacy", "billing"])).optional()
+});
+
+const recordBillingSchema = z.object({
+  amount: z.coerce.number().positive("amount must be greater than 0"),
+  note: z.string().optional(),
+  billing_label: z.enum(["lab", "pharmacy", "treatment"]).optional()
 });
 
 const revertAnchorSchema = z.object({
-  anchor: z.enum(["waiting", "consult_open", "consult_closed", "billing", "paid", "lab", "lab_done"])
+  anchor: z.enum(["waiting", "consult_open", "consult_closed", "lab", "lab_done"])
 });
 
 const getTokenId = (req = {}) => String(req?.params?.id ?? "").trim();
@@ -81,9 +95,45 @@ export const endConsult = asyncHandler(async (req, res) => {
   return sendSuccess(res, result, "Consult ended");
 });
 
+export const orderLabs = asyncHandler(async (req, res) => {
+  const result = await orderLabsAfterConsult(getTokenId(req));
+  return sendSuccess(res, result, "Lab tests ordered for this visit");
+});
+
 export const recordBillingPaymentHandler = asyncHandler(async (req, res) => {
-  const result = await recordBillingPayment(getTokenId(req));
+  const input = recordBillingSchema.parse(req.body ?? {});
+  const result = await recordBillingPayment(getTokenId(req), input);
   return sendSuccess(res, result, "Payment recorded");
+});
+
+export const startBillingHandler = asyncHandler(async (req, res) => {
+  const result = await startBillingPhase(getTokenId(req));
+  return sendSuccess(res, result, "Billing started");
+});
+
+export const stopBillingHandler = asyncHandler(async (req, res) => {
+  const result = await stopBillingPhase(getTokenId(req));
+  return sendSuccess(res, result, "Billing stopped");
+});
+
+export const endBillingHandler = asyncHandler(async (req, res) => {
+  const result = await endBillingPhase(getTokenId(req));
+  return sendSuccess(res, result, "Billing ended");
+});
+
+export const startPharmacyHandler = asyncHandler(async (req, res) => {
+  const result = await startPharmacyPhase(getTokenId(req));
+  return sendSuccess(res, result, "Pharmacy started");
+});
+
+export const stopPharmacyHandler = asyncHandler(async (req, res) => {
+  const result = await stopPharmacyPhase(getTokenId(req));
+  return sendSuccess(res, result, "Pharmacy stopped");
+});
+
+export const endPharmacyHandler = asyncHandler(async (req, res) => {
+  const result = await endPharmacyPhase(getTokenId(req));
+  return sendSuccess(res, result, "Pharmacy ended");
 });
 
 export const startLab = asyncHandler(async (req, res) => {

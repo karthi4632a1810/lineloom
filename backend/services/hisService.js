@@ -24,7 +24,8 @@ const CACHE_TTL = {
   HIS_PATIENTS: 30 * 1000,
   HIS_SEARCH: 20 * 1000,
   DEMOGRAPHICS: 60 * 1000,
-  EXISTS: 45 * 1000
+  EXISTS: 45 * 1000,
+  DEPARTMENTS: 5 * 60 * 1000
 };
 const queryCache = new Map();
 
@@ -187,6 +188,24 @@ const safeIdent = (identifier = "") => String(identifier ?? "").replaceAll("]", 
 const qualifiedTable = (schema = "", table = "") =>
   `[${safeIdent(schema)}].[${safeIdent(table)}]`;
 
+const buildTableMapFromInfoSchemaRows = (rows = []) => {
+  const tableMap = {};
+  for (const row of rows) {
+    const schema = String(row?.TABLE_SCHEMA ?? "");
+    const table = String(row?.TABLE_NAME ?? "");
+    const column = String(row?.COLUMN_NAME ?? "");
+    if (!schema || !table || !column) {
+      continue;
+    }
+    const key = `${schema}.${table}`;
+    if (!tableMap[key]) {
+      tableMap[key] = { schema, table, columns: new Set() };
+    }
+    tableMap[key].columns.add(column);
+  }
+  return tableMap;
+};
+
 const chooseLookupTable = (tableMap = {}, idCandidates = [], nameCandidates = [], tableHints = []) => {
   const entries = Object.entries(tableMap);
   if (!entries.length) {
@@ -223,6 +242,11 @@ const chooseLookupTable = (tableMap = {}, idCandidates = [], nameCandidates = []
   return best;
 };
 
+export const __testables = {
+  chooseLookupTable,
+  buildTableMapFromInfoSchemaRows
+};
+
 const getLookupMeta = async () => {
   const now = Date.now();
   if (cachedLookupMeta !== null && now - lastLookupMetaAt < LOOKUP_TTL_MS) {
@@ -246,20 +270,7 @@ const getLookupMeta = async () => {
 
   try {
     const rows = await executeHisQueryWithRetry(query, 10000);
-    const tableMap = {};
-    for (const row of rows) {
-      const schema = String(row?.TABLE_SCHEMA ?? "");
-      const table = String(row?.TABLE_NAME ?? "");
-      const column = String(row?.COLUMN_NAME ?? "");
-      if (!schema || !table || !column) {
-        continue;
-      }
-      const key = `${schema}.${table}`;
-      if (!tableMap[key]) {
-        tableMap[key] = { schema, table, columns: new Set() };
-      }
-      tableMap[key].columns.add(column);
-    }
+    const tableMap = buildTableMapFromInfoSchemaRows(rows);
 
     const dept = chooseLookupTable(
       tableMap,
@@ -310,13 +321,21 @@ export const fetchHisPatients = async () => {
     return cached;
   }
   const phoneExpr = await getPatientPhoneExpression();
+  const lookupMeta = await getLookupMeta();
+  const deptNameFromOpExpr = lookupMeta?.dept
+    ? `(SELECT TOP 1 CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.dept.table} lu WHERE CAST(lu.${lookupMeta.dept.idCol} AS VARCHAR(100)) = CAST(op.iDept_id AS VARCHAR(100)))`
+    : "CAST(NULL AS VARCHAR(200))";
+  const deptNameFromIpExpr = lookupMeta?.dept
+    ? `(SELECT TOP 1 CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.dept.table} lu WHERE CAST(lu.${lookupMeta.dept.idCol} AS VARCHAR(100)) = CAST(ip.iDept_id AS VARCHAR(100)))`
+    : "CAST(NULL AS VARCHAR(200))";
   const query = `
     SELECT
       CAST(pm.iPat_id AS VARCHAR(100)) AS patient_id,
       CAST(op.iOP_Reg_No AS VARCHAR(100)) AS visit_id,
       CAST(pm.cPat_Name AS VARCHAR(200)) AS name,
       ${phoneExpr} AS phone,
-      CAST(op.iDept_id AS VARCHAR(100)) AS department,
+      CAST(op.iDept_id AS VARCHAR(100)) AS dept_id,
+      ${deptNameFromOpExpr} AS dept_name,
       'OP' AS type
     FROM [dbo].[Mast_OP_Admission] op
     INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
@@ -327,12 +346,13 @@ export const fetchHisPatients = async () => {
       CAST(ip.iIP_Reg_No AS VARCHAR(100)) AS visit_id,
       CAST(pm.cPat_Name AS VARCHAR(200)) AS name,
       ${phoneExpr} AS phone,
-      CAST(ip.iDept_id AS VARCHAR(100)) AS department,
+      CAST(ip.iDept_id AS VARCHAR(100)) AS dept_id,
+      ${deptNameFromIpExpr} AS dept_name,
       'IP' AS type
     FROM [dbo].[Mast_IP_Admission] ip
     INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
     WHERE CAST(ip.dIP_dt AS DATE) = CAST(GETDATE() AS DATE)
-    ORDER BY department, name;
+    ORDER BY dept_name, dept_id, name;
   `;
 
   try {
@@ -342,7 +362,12 @@ export const fetchHisPatients = async () => {
       visit_id: String(patient?.visit_id ?? ""),
       name: String(patient?.name ?? "Unknown"),
       phone: String(patient?.phone ?? ""),
-      department: String(patient?.department ?? "General"),
+      dept_id: String(patient?.dept_id ?? ""),
+      dept_name: String(patient?.dept_name ?? "").trim(),
+      department:
+        String(patient?.dept_name ?? "").trim() ||
+        String(patient?.dept_id ?? "").trim() ||
+        "General",
       type: patient?.type === "IP" ? "IP" : "OP"
     }));
     setCache(cacheKey, mapped, CACHE_TTL.HIS_PATIENTS);
@@ -562,7 +587,54 @@ export const searchHisPatients = async (filters = {}) => {
   }
 };
 
+export const fetchHisDepartments = async () => {
+  if (!env.hisEnabled) {
+    return [];
+  }
+  const cacheKey = "his:departments";
+  const cached = getCache(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const lookupMeta = await getLookupMeta();
+  if (!lookupMeta?.dept) {
+    return [];
+  }
+
+  const query = `
+    SELECT DISTINCT
+      CAST(lu.${lookupMeta.dept.idCol} AS VARCHAR(100)) AS dept_id,
+      CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)) AS dept_name
+    FROM ${lookupMeta.dept.table} lu
+    WHERE lu.${lookupMeta.dept.nameCol} IS NOT NULL
+      AND LTRIM(RTRIM(CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)))) <> ''
+    ORDER BY dept_name;
+  `;
+
+  try {
+    const rows = await executeHisQueryWithRetry(query, 12000);
+    const mapped = rows.map((row) => ({
+      dept_id: String(row?.dept_id ?? "").trim(),
+      dept_name: String(row?.dept_name ?? "").trim(),
+      department: String(row?.dept_name ?? "").trim()
+    }));
+    setCache(cacheKey, mapped, CACHE_TTL.DEPARTMENTS);
+    return mapped;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    logger.error("HIS department fetch failed", {
+      message: error?.message ?? "Unknown SQL error"
+    });
+    throw new ApiError("Unable to fetch departments from HIS", 503);
+  }
+};
+
 export const fetchPatientDemographics = async (patientIds = []) => {
+  if (!env.hisEnabled) {
+    return {};
+  }
   const normalized = [...new Set(patientIds.map((id) => String(id ?? "").trim()))].filter(
     Boolean
   );

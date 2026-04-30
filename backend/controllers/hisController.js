@@ -1,6 +1,6 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/response.js";
-import { fetchHisPatients, searchHisPatients } from "../services/hisService.js";
+import { fetchHisDepartments, fetchHisPatients, searchHisPatients } from "../services/hisService.js";
 
 export const getHisPatients = asyncHandler(async (_req, res) => {
   const patients = await fetchHisPatients();
@@ -15,4 +15,9 @@ export const searchPatientsFromHis = asyncHandler(async (req, res) => {
     date_to: req?.query?.date_to
   });
   return sendSuccess(res, patients, "Searched patients from HIS");
+});
+
+export const getHisDepartments = asyncHandler(async (_req, res) => {
+  const departments = await fetchHisDepartments();
+  return sendSuccess(res, departments, "Fetched departments from HIS");
 });

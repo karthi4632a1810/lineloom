@@ -59,3 +59,18 @@ test("buildTatMetrics: missing consult_end yields null consulting TAT when not c
   );
   assert.equal(m.consulting_tat_minutes, null);
 });
+
+test("buildTatMetrics: lab wait uses consult_end for labs_ordered path (not billing)", () => {
+  const consultEnd = new Date("2025-01-01T10:00:00Z");
+  const labStart = new Date("2025-01-01T10:15:00Z");
+  const m = buildTatMetrics(
+    {
+      consult_start: new Date("2025-01-01T09:00:00Z"),
+      consult_end: consultEnd,
+      labs_ordered: true,
+      lab_start: labStart
+    },
+    "CONSULTING"
+  );
+  assert.equal(m.lab_wait_tat_minutes, 15);
+});

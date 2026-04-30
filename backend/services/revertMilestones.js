@@ -5,11 +5,9 @@ export const VISIT_STAGE_ORDER = {
   waiting: 0,
   consult_open: 1,
   consult_closed: 2,
-  billing: 3,
-  paid: 4,
-  lab: 5,
-  lab_done: 6,
-  treatment: 7
+  lab: 3,
+  lab_done: 4,
+  treatment: 5
 };
 
 const NOTE_CLEAR = { consult_note: "", referred_department: "" };
@@ -40,12 +38,6 @@ export const detectVisitStage = (tracking = {}, status = "") => {
   if (tracking.lab_start) {
     return "lab";
   }
-  if (tracking.billing_end) {
-    return "paid";
-  }
-  if (tracking.billing_start) {
-    return "billing";
-  }
   if (tracking.consult_end) {
     return "consult_closed";
   }
@@ -69,6 +61,12 @@ export const buildRevertPatchForAnchor = (anchor = "") => {
         consult_end: null,
         billing_start: null,
         billing_end: null,
+        billing_elapsed_ms: 0,
+        billing_total_amount: 0,
+        billing_paid_amount: 0,
+        billing_payments: [],
+        labs_ordered: false,
+        post_consult_plans: [],
         lab_start: null,
         lab_end: null,
         care_start: null,
@@ -78,33 +76,14 @@ export const buildRevertPatchForAnchor = (anchor = "") => {
       return {
         ...base,
         consult_end: null,
-        billing_start: null,
-        billing_end: null,
+        labs_ordered: false,
+        post_consult_plans: [],
         lab_start: null,
         lab_end: null,
         care_start: null,
         care_end: null
       };
     case "consult_closed":
-      return {
-        ...base,
-        billing_start: null,
-        billing_end: null,
-        lab_start: null,
-        lab_end: null,
-        care_start: null,
-        care_end: null
-      };
-    case "billing":
-      return {
-        ...base,
-        billing_end: null,
-        lab_start: null,
-        lab_end: null,
-        care_start: null,
-        care_end: null
-      };
-    case "paid":
       return {
         ...base,
         lab_start: null,

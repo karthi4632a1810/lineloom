@@ -1,6 +1,19 @@
 import { Token } from "../models/Token.js";
 import { TimeTracking } from "../models/TimeTracking.js";
 import { resolveEffectiveTreatmentStart } from "../utils/timeMetrics.js";
+import { fetchPatientDemographics } from "./hisService.js";
+
+const rowNamePhoneFromHis = (token = {}, demoByPatientId = {}) => {
+  const pid = String(token?.patient_id ?? "").trim();
+  const storedName = String(token?.patient_name ?? "").trim();
+  const name =
+    storedName ||
+    (pid ? String(demoByPatientId[pid]?.name ?? "").trim() : "") ||
+    `Patient ${token.patient_id}`;
+  const storedPhone = String(token?.patient_phone ?? "").trim();
+  const phone = storedPhone || (pid ? String(demoByPatientId[pid]?.phone ?? "").trim() : "");
+  return { name, phone };
+};
 
 const getTodayRange = () => {
   const start = new Date();
@@ -65,11 +78,17 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     tracking.billing_end,
     status === "CONSULTING" && Boolean(tracking.billing_start) && !tracking.billing_end
   );
-  const labWait = minutesBetween(
-    tracking.billing_end,
-    tracking.lab_start,
-    status === "CONSULTING" && Boolean(tracking.billing_end) && !tracking.lab_start
-  );
+  /** Lab queue: clinical wait after consult until lab starts (not tied to billing). */
+  const inLabPath =
+    Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
+  const labWait =
+    tracking.consult_end && inLabPath
+      ? minutesBetween(
+          tracking.consult_end,
+          tracking.lab_start,
+          status === "CONSULTING" && !tracking.lab_start
+        )
+      : null;
   const labTest = minutesBetween(
     tracking.lab_start,
     tracking.lab_end,
@@ -86,7 +105,7 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     tracking.break_end,
     Boolean(tracking.break_start) && !tracking.break_end
   );
-  const overall = [waiting, consulting, billing, labWait, labTest, treatment]
+  const overall = [waiting, consulting, labWait, labTest, treatment]
     .filter((value) => value != null)
     .reduce((sum, value) => sum + value, 0);
   return {
@@ -142,6 +161,18 @@ export const getDashboardSummary = async (filters = {}) => {
 
 export const getDashboardTokens = async (filters = {}) => {
   const tokens = await resolveTimeRange(filters);
+  const patientIdsNeedingName = [
+    ...new Set(
+      tokens
+        .filter((t) => !String(t?.patient_name ?? "").trim())
+        .map((t) => String(t?.patient_id ?? "").trim())
+        .filter(Boolean)
+    )
+  ];
+  const demoByPatientId =
+    patientIdsNeedingName.length > 0
+      ? await fetchPatientDemographics(patientIdsNeedingName)
+      : {};
   const tokenIds = tokens.map((token) => token.token_id);
   const trackingRows = await TimeTracking.find({ token_id: { $in: tokenIds } }).lean();
   const trackingByToken = trackingRows.reduce((acc, row) => {
@@ -154,12 +185,13 @@ export const getDashboardTokens = async (filters = {}) => {
   return tokens
     .map((token) => {
       const tracking = trackingByToken[token.token_id] ?? {};
+      const { name, phone } = rowNamePhoneFromHis(token, demoByPatientId);
       return {
         token_id: token.token_id,
         patient_id: token.patient_id,
         visit_id: token.visit_id,
-        name: token.patient_name || `Patient ${token.patient_id}`,
-        phone: token.patient_phone || "",
+        name,
+        phone,
         department: token.department,
         status: token.status === "ACTIVE" ? "WAITING" : token.status,
         waiting_start: tracking.waiting_start ?? null,
@@ -169,6 +201,10 @@ export const getDashboardTokens = async (filters = {}) => {
         treatment_end: tracking.care_end ?? null,
         billing_start: tracking.billing_start ?? null,
         billing_end: tracking.billing_end ?? null,
+        labs_ordered: Boolean(tracking.labs_ordered),
+        post_consult_plans: Array.isArray(tracking.post_consult_plans)
+          ? tracking.post_consult_plans
+          : [],
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
         consult_note: tracking.consult_note ?? "",

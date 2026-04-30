@@ -4,16 +4,23 @@ import {
   completeVisit,
   createTokenHandler,
   endCare,
+  endBillingHandler,
   endConsult,
+  orderLabs,
   endLab,
+  endPharmacyHandler,
   getCompletedTokensHandler,
   getLiveQueueHandler,
   getTokenJourneyHandler,
   getTokenDetailHandler,
   recordBillingPaymentHandler,
+  startBillingHandler,
   startCare,
   startConsult,
   startLab,
+  startPharmacyHandler,
+  stopBillingHandler,
+  stopPharmacyHandler,
   startWaiting,
   revertToAnchor,
   stepBack
@@ -43,9 +50,44 @@ router.post("/:id/start-waiting", authorizeRoles("admin", "nurse"), startWaiting
 router.post("/:id/start-consult", authorizeRoles("admin", "doctor"), startConsult);
 router.post("/:id/end-consult", authorizeRoles("admin", "doctor"), endConsult);
 router.post(
+  "/:id/order-labs",
+  authorizeRoles("admin", "doctor", "nurse"),
+  orderLabs
+);
+router.post(
+  "/:id/start-billing",
+  authorizeRoles("admin", "doctor", "nurse"),
+  startBillingHandler
+);
+router.post(
+  "/:id/stop-billing",
+  authorizeRoles("admin", "doctor", "nurse"),
+  stopBillingHandler
+);
+router.post(
+  "/:id/end-billing",
+  authorizeRoles("admin", "doctor", "nurse"),
+  endBillingHandler
+);
+router.post(
   "/:id/record-billing-payment",
   authorizeRoles("admin", "doctor", "nurse"),
   recordBillingPaymentHandler
+);
+router.post(
+  "/:id/start-pharmacy",
+  authorizeRoles("admin", "doctor", "nurse"),
+  startPharmacyHandler
+);
+router.post(
+  "/:id/stop-pharmacy",
+  authorizeRoles("admin", "doctor", "nurse"),
+  stopPharmacyHandler
+);
+router.post(
+  "/:id/end-pharmacy",
+  authorizeRoles("admin", "doctor", "nurse"),
+  endPharmacyHandler
 );
 router.post("/:id/start-lab", authorizeRoles("admin", "doctor", "nurse"), startLab);
 router.post("/:id/end-lab", authorizeRoles("admin", "doctor", "nurse"), endLab);

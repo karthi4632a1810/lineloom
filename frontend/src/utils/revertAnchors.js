@@ -4,19 +4,15 @@ export const VISIT_STAGE_ORDER = {
   waiting: 0,
   consult_open: 1,
   consult_closed: 2,
-  billing: 3,
-  paid: 4,
-  lab: 5,
-  lab_done: 6,
-  treatment: 7
+  lab: 3,
+  lab_done: 4,
+  treatment: 5
 };
 
 const ANCHOR_LABELS = {
   waiting: "Waiting pool",
   consult_open: "Consult in progress",
-  consult_closed: "After consult (before billing / labs / treatment)",
-  billing: "Billing / payment",
-  paid: "After payment (lab queue)",
+  consult_closed: "After consult (before labs / treatment)",
   lab: "Lab testing",
   lab_done: "After lab (before treatment)"
 };
@@ -60,12 +56,6 @@ export const detectVisitStage = (row = {}) => {
   if (tr.lab_start) {
     return "lab";
   }
-  if (tr.billing_end) {
-    return "paid";
-  }
-  if (tr.billing_start) {
-    return "billing";
-  }
   if (tr.consult_end) {
     return "consult_closed";
   }
@@ -84,8 +74,6 @@ export const buildRevertPatchForAnchor = (anchor = "") => {
         ...base,
         consult_start: null,
         consult_end: null,
-        billing_start: null,
-        billing_end: null,
         lab_start: null,
         lab_end: null,
         care_start: null,
@@ -95,33 +83,12 @@ export const buildRevertPatchForAnchor = (anchor = "") => {
       return {
         ...base,
         consult_end: null,
-        billing_start: null,
-        billing_end: null,
         lab_start: null,
         lab_end: null,
         care_start: null,
         care_end: null
       };
     case "consult_closed":
-      return {
-        ...base,
-        billing_start: null,
-        billing_end: null,
-        lab_start: null,
-        lab_end: null,
-        care_start: null,
-        care_end: null
-      };
-    case "billing":
-      return {
-        ...base,
-        billing_end: null,
-        lab_start: null,
-        lab_end: null,
-        care_start: null,
-        care_end: null
-      };
-    case "paid":
       return {
         ...base,
         lab_start: null,
@@ -181,8 +148,6 @@ export const getVisitPhaseLabel = (row = {}) => {
     waiting: "Waiting",
     consult_open: "In consulting",
     consult_closed: "Consult ended",
-    billing: "Billing / payment",
-    paid: "Lab waiting",
     lab: "Lab testing",
     lab_done: "Post-lab",
     treatment: "In treatment"
@@ -202,8 +167,6 @@ export const getVisitPhaseChipClass = (row = {}) => {
     treatment: "status-in_treatment",
     consult_open: "status-consulting",
     consult_closed: "visit-phase-postconsult",
-    billing: "visit-phase-billing",
-    paid: "visit-phase-labqueue",
     lab: "visit-phase-labtest",
     lab_done: "visit-phase-postlab"
   };
@@ -222,12 +185,9 @@ export const getRevertPreviewForAnchor = (row = {}, anchor = "") => {
   const detailLines = {
     waiting: "Clears consultation and every step after admission. Token returns to the waiting pool.",
     consult_open:
-      "Reopens consultation: consult end, billing, lab, and treatment timestamps after that are cleared.",
+      "Reopens consultation: consult end, lab, and treatment timestamps after that are cleared.",
     consult_closed:
-      "Returns to post-consult state: billing, lab, and treatment progress after the consult is cleared.",
-    billing:
-      "Returns to billing in progress: payment and lab/treatment steps after billing are cleared.",
-    paid: "Returns to after payment (lab queue): lab and treatment progress is cleared.",
+      "Returns to post-consult state: lab and treatment progress after the consult is cleared.",
     lab: "Returns to lab in progress: lab end and treatment are cleared.",
     lab_done: "Clears treatment start/end only; visit stays after lab until treatment starts again."
   };

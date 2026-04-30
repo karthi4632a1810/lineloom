@@ -40,6 +40,33 @@ const segmentDurationMinutes = (start, end, useNowIfOpen) => {
   return Number((ms / 60000).toFixed(2));
 };
 
+const getLogBounds = (logs = []) => {
+  const entries = (Array.isArray(logs) ? logs : [])
+    .map((row) => ({
+      start: row?.start ? new Date(row.start) : null,
+      end: row?.end ? new Date(row.end) : null
+    }))
+    .filter((row) => row.start && !Number.isNaN(row.start.getTime()))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  if (!entries.length) {
+    return { firstStart: null, lastEnd: null, hasOpen: false };
+  }
+  const firstStart = entries[0].start;
+  const closed = entries.filter((row) => row.end && !Number.isNaN(row.end.getTime()));
+  const lastEnd = closed.length ? closed[closed.length - 1].end : null;
+  const hasOpen = entries.some((row) => !row.end);
+  return { firstStart, lastEnd, hasOpen };
+};
+
+const normalizeTimelineLogs = (logs = []) =>
+  (Array.isArray(logs) ? logs : [])
+    .map((row) => ({
+      start: row?.start ? new Date(row.start) : null,
+      end: row?.end ? new Date(row.end) : null
+    }))
+    .filter((row) => row.start && !Number.isNaN(row.start.getTime()))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
 /**
  * Ordered journey segments for a visit (chronological by start time).
  */
@@ -71,32 +98,35 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
       in_progress: open
     });
   }
-  if (tracking.billing_start) {
-    const open = status === "CONSULTING" && Boolean(tracking.billing_start) && !tracking.billing_end;
-    candidates.push({
-      kind: "billing",
-      label: "Billing",
-      start: tracking.billing_start,
-      end: tracking.billing_end ?? null,
-      duration_minutes: metrics.billing_tat_minutes,
-      in_progress: open
-    });
-  }
-  if (
-    tracking.billing_end &&
-    (tracking.lab_start || (status === "CONSULTING" && !tracking.lab_start))
-  ) {
-    const open = status === "CONSULTING" && !tracking.lab_start;
+  /** Lab queue is clinical only (billing is tracked separately, not on this timeline). */
+  const inLabPath =
+    Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
+  const labLogs = normalizeTimelineLogs(tracking.lab_logs);
+  const firstLabStart = labLogs[0]?.start ?? tracking.lab_start ?? null;
+  if (tracking.consult_end && inLabPath) {
+    const open = status === "CONSULTING" && !firstLabStart;
     candidates.push({
       kind: "lab_queue",
-      label: "Lab queue (post-payment)",
-      start: tracking.billing_end,
-      end: tracking.lab_start ?? null,
+      label: "Lab queue",
+      start: tracking.consult_end,
+      end: firstLabStart,
       duration_minutes: metrics.lab_wait_tat_minutes,
       in_progress: open
     });
   }
-  if (tracking.lab_start) {
+  if (labLogs.length) {
+    labLogs.forEach((row, idx) => {
+      const open = status === "CONSULTING" && !row.end;
+      candidates.push({
+        kind: "lab",
+        label: labLogs.length > 1 ? `Lab testing #${idx + 1}` : "Lab testing",
+        start: row.start,
+        end: row.end ?? null,
+        duration_minutes: segmentDurationMinutes(row.start, row.end, open),
+        in_progress: open
+      });
+    });
+  } else if (tracking.lab_start) {
     const open = status === "CONSULTING" && !tracking.lab_end;
     candidates.push({
       kind: "lab",
@@ -108,15 +138,64 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
     });
   }
 
-  const treatmentStart = resolveEffectiveTreatmentStart(tracking.care_start, tracking.consult_end);
-  if (treatmentStart) {
-    const open = status === "IN_TREATMENT" && !tracking.care_end;
+  const pharmacyLogs = normalizeTimelineLogs(tracking.pharmacy_logs);
+  if (pharmacyLogs.length) {
+    pharmacyLogs.forEach((row, idx) => {
+      const open = status === "CONSULTING" && !row.end;
+      candidates.push({
+        kind: "pharmacy",
+        label: pharmacyLogs.length > 1 ? `Pharmacy #${idx + 1}` : "Pharmacy",
+        start: row.start,
+        end: row.end ?? null,
+        duration_minutes: segmentDurationMinutes(row.start, row.end, open),
+        in_progress: open
+      });
+    });
+  } else if (tracking.pharmacy_start || tracking.pharmacy_end) {
+    const open = status === "CONSULTING" && tracking.pharmacy_start && !tracking.pharmacy_end;
+    candidates.push({
+      kind: "pharmacy",
+      label: "Pharmacy",
+      start: tracking.pharmacy_start ?? tracking.consult_end ?? null,
+      end: tracking.pharmacy_end ?? null,
+      duration_minutes: segmentDurationMinutes(
+        tracking.pharmacy_start ?? tracking.consult_end,
+        tracking.pharmacy_end,
+        open
+      ),
+      in_progress: open
+    });
+  }
+
+  const treatmentLogBounds = getLogBounds(tracking.treatment_logs);
+  const treatmentStart =
+    treatmentLogBounds.firstStart ??
+    resolveEffectiveTreatmentStart(tracking.care_start, tracking.consult_end);
+  const treatmentEnd = treatmentLogBounds.lastEnd ?? tracking.care_end ?? null;
+  const treatmentLogs = normalizeTimelineLogs(tracking.treatment_logs);
+  if (treatmentLogs.length) {
+    treatmentLogs.forEach((row, idx) => {
+      const open = (status === "IN_TREATMENT" && !row.end) || !row.end;
+      candidates.push({
+        kind: "treatment",
+        label: treatmentLogs.length > 1 ? `Treatment / care #${idx + 1}` : "Treatment / care",
+        start: row.start,
+        end: row.end ?? null,
+        duration_minutes: segmentDurationMinutes(row.start, row.end, open),
+        in_progress: open
+      });
+    });
+  } else if (treatmentStart) {
+    const open =
+      (status === "IN_TREATMENT" && !treatmentEnd) || treatmentLogBounds.hasOpen;
+    const treatmentDuration =
+      segmentDurationMinutes(treatmentStart, treatmentEnd, open) ?? metrics.treatment_tat_minutes;
     candidates.push({
       kind: "treatment",
       label: "Treatment / care",
       start: treatmentStart,
-      end: tracking.care_end ?? null,
-      duration_minutes: metrics.treatment_tat_minutes,
+      end: treatmentEnd,
+      duration_minutes: treatmentDuration,
       in_progress: open
     });
   }
@@ -129,6 +208,40 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
       start: tracking.break_start,
       end: tracking.break_end ?? null,
       duration_minutes: metrics.break_tat_minutes ?? segmentDurationMinutes(tracking.break_start, tracking.break_end, open),
+      in_progress: open
+    });
+  }
+
+  // Billing branch/timeline segment
+  const billingPayments = Array.isArray(tracking.billing_payments) ? tracking.billing_payments : [];
+  const paymentTimes = billingPayments
+    .map((p) => (p?.paid_at ? new Date(p.paid_at) : null))
+    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  const startCandidates = [
+    tracking.billing_start ? new Date(tracking.billing_start) : null,
+    paymentTimes[0] ?? null
+  ].filter((d) => d && !Number.isNaN(d.getTime()));
+  const endCandidates = [
+    tracking.billing_end ? new Date(tracking.billing_end) : null,
+    paymentTimes[paymentTimes.length - 1] ?? null
+  ].filter((d) => d && !Number.isNaN(d.getTime()));
+  const billingStart =
+    startCandidates.length ? new Date(Math.min(...startCandidates.map((d) => d.getTime()))) : null;
+  const billingEnd =
+    endCandidates.length ? new Date(Math.max(...endCandidates.map((d) => d.getTime()))) : null;
+  const validBillingEnd =
+    billingStart && billingEnd && billingEnd.getTime() < billingStart.getTime() ? null : billingEnd;
+  if (billingStart || billingEnd) {
+    const open = Boolean(tracking.billing_start) && !validBillingEnd;
+    candidates.push({
+      kind: "billing",
+      label: "Billing",
+      start: billingStart ?? validBillingEnd,
+      end: validBillingEnd ?? null,
+      duration_minutes:
+        metrics.billing_tat_minutes ??
+        segmentDurationMinutes(billingStart ?? validBillingEnd, validBillingEnd, open),
       in_progress: open
     });
   }

@@ -96,10 +96,9 @@ export const CompletedQueuePage = () => {
           <table>
             <thead>
               <tr>
-                <th>Patient ID</th>
+                <th className="col-token-no">Token #</th>
                 <th>Name</th>
                 <th>Phone</th>
-                <th>Visit ID</th>
                 <th>Department</th>
                 <th className="col-tat">Waiting TAT</th>
                 <th className="col-tat">Consult TAT</th>
@@ -110,7 +109,7 @@ export const CompletedQueuePage = () => {
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((row) => (
+              {visibleRows.map((row, queueIndex) => (
                 <tr
                   key={row.token_id}
                   className="clickable-row"
@@ -122,10 +121,14 @@ export const CompletedQueuePage = () => {
                     navigate(`/tokens/${cleanId}`);
                   }}
                 >
-                  <td>{row.patient_id}</td>
+                  <td className="col-token-no">
+                    <span className="token-queue-no">#{queueIndex + 1}</span>
+                    <span className="token-queue-id" title={row.token_id}>
+                      {row.token_id}
+                    </span>
+                  </td>
                   <td>{row.name}</td>
                   <td>{row.phone || "—"}</td>
-                  <td>{row.visit_id}</td>
                   <td>{row.department}</td>
                   <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.waiting_tat_minutes))}</td>
                   <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.consulting_tat_minutes))}</td>

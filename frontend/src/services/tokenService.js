@@ -32,8 +32,22 @@ export const startConsultRequest = async (tokenId = "", payload = {}) =>
   apiClient.post(`/tokens/${tokenId}/start-consult`, payload);
 export const endConsultRequest = async (tokenId = "", payload = {}) =>
   apiClient.post(`/tokens/${tokenId}/end-consult`, payload);
-export const recordBillingPaymentRequest = async (tokenId = "") =>
-  apiClient.post(`/tokens/${tokenId}/record-billing-payment`);
+export const orderLabsRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/order-labs`);
+export const startBillingRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/start-billing`);
+export const stopBillingRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/stop-billing`);
+export const endBillingRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/end-billing`);
+export const startPharmacyRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/start-pharmacy`);
+export const stopPharmacyRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/stop-pharmacy`);
+export const endPharmacyRequest = async (tokenId = "") =>
+  apiClient.post(`/tokens/${tokenId}/end-pharmacy`);
+export const recordBillingPaymentRequest = async (tokenId = "", payload = {}) =>
+  apiClient.post(`/tokens/${tokenId}/record-billing-payment`, payload);
 export const startLabRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/start-lab`);
 export const endLabRequest = async (tokenId = "") =>

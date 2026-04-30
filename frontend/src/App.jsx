@@ -1,13 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
-import { AdminRoute } from "./components/AdminRoute";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { DepartmentAnalyticsPage } from "./pages/DepartmentAnalyticsPage";
 import { AlertsPage } from "./pages/AlertsPage";
-import { DepartmentSettingsPage } from "./pages/DepartmentSettingsPage";
 import { CompletedQueuePage } from "./pages/CompletedQueuePage";
 import { LiveQueuePage } from "./pages/LiveQueuePage";
 import { TokenCreationPage } from "./pages/TokenCreationPage";
@@ -180,18 +178,6 @@ export default function App() {
               <AppLayout>
                 <PlaceholderPage title="Help Center" />
               </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings/departments"
-          element={
-            <ProtectedRoute>
-              <AdminRoute>
-                <AppLayout>
-                  <DepartmentSettingsPage />
-                </AppLayout>
-              </AdminRoute>
             </ProtectedRoute>
           }
         />

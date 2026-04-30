@@ -57,17 +57,6 @@ export const Navbar = () => {
               <span>{link.label}</span>
             </NavLink>
           ))}
-          {role === "admin" ? (
-            <NavLink
-              to="/settings/departments"
-              className={({ isActive }) =>
-                `side-link-item ${isActive ? "active" : ""}`.trim()
-              }
-            >
-              <span className="menu-icon">Cfg</span>
-              <span>Departments</span>
-            </NavLink>
-          ) : null}
         </div>
         <div className="side-footer">
           <button type="button" onClick={() => navigate("/token-create")}>

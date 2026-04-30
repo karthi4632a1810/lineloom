@@ -35,14 +35,29 @@ export const resolveEffectiveTreatmentStart = (careStart = null, consultEnd = nu
   return a >= b ? careStart : consultEnd;
 };
 
-export const calculateTimeMetrics = (tracking = {}) => {
+export const calculateTimeMetrics = (tracking = {}, status = null) => {
   const waitingMs = toMs(tracking.waiting_start, tracking.consult_start);
   const consultMs = toMs(tracking.consult_start, tracking.consult_end);
   const careStart = resolveEffectiveTreatmentStart(tracking.care_start, tracking.consult_end);
   const careMs = toMs(careStart, tracking.care_end);
   const breakMs = toMs(tracking.break_start, tracking.break_end);
-  const billingMs = toMs(tracking.billing_start, tracking.billing_end);
-  const labWaitMs = toMs(tracking.billing_end, tracking.lab_start);
+  const billingElapsed = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+  const billingCurrentMs =
+    tracking.billing_start && !tracking.billing_end
+      ? Math.max(Date.now() - new Date(tracking.billing_start).getTime(), 0)
+      : 0;
+  const billingMsRaw = billingElapsed + billingCurrentMs;
+  const billingMs = billingMsRaw > 0 ? billingMsRaw : toMs(tracking.billing_start, tracking.billing_end);
+  const inLabPath =
+    Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
+  let labWaitMs = null;
+  if (tracking.consult_end && inLabPath) {
+    if (tracking.lab_start) {
+      labWaitMs = toMs(tracking.consult_end, tracking.lab_start);
+    } else if (String(status ?? "") === "CONSULTING") {
+      labWaitMs = Math.max(Date.now() - new Date(tracking.consult_end).getTime(), 0);
+    }
+  }
   const labMs = toMs(tracking.lab_start, tracking.lab_end);
 
   return {

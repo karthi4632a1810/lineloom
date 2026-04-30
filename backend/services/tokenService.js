@@ -12,6 +12,7 @@ import {
   detectVisitStage,
   resolveStatusAfterRevert
 } from "./revertMilestones.js";
+import { fetchPatientDemographics } from "./hisService.js";
 
 const sendDebugLog = (hypothesisId = "", message = "", data = {}) => {
   // #region agent log
@@ -60,6 +61,51 @@ const updateTracking = async (tokenId = "", payload = {}) => {
     updatedFields: Object.keys(payload ?? {})
   });
   return updated;
+};
+
+const normalizeBillingPayments = (payments = []) =>
+  Array.isArray(payments)
+    ? payments
+        .map((item) => ({
+          amount: Number(item?.amount ?? 0),
+          paid_at: item?.paid_at ? new Date(item.paid_at) : new Date(),
+          note: String(item?.note ?? "").trim(),
+          label: String(item?.label ?? "").trim().toLowerCase()
+        }))
+        .filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+    : [];
+
+const sumBillingPayments = (payments = []) =>
+  Number(
+    normalizeBillingPayments(payments)
+      .reduce((sum, item) => sum + item.amount, 0)
+      .toFixed(2)
+  );
+
+const normalizeWorkflowLogs = (logs = []) =>
+  Array.isArray(logs)
+    ? logs
+        .map((entry) => ({
+          start: entry?.start ? new Date(entry.start) : null,
+          end: entry?.end ? new Date(entry.end) : null
+        }))
+        .filter((entry) => entry.start && !Number.isNaN(entry.start.getTime()))
+    : [];
+
+const appendWorkflowStart = (logs = [], start = new Date()) => [
+  ...normalizeWorkflowLogs(logs),
+  { start, end: null }
+];
+
+const closeWorkflowLastOpen = (logs = [], end = new Date()) => {
+  const normalized = normalizeWorkflowLogs(logs);
+  for (let i = normalized.length - 1; i >= 0; i -= 1) {
+    if (!normalized[i].end) {
+      normalized[i] = { ...normalized[i], end };
+      return normalized;
+    }
+  }
+  return normalized;
 };
 
 export const createToken = async (input = {}) => {
@@ -124,7 +170,23 @@ export const startConsulting = async (tokenId = "", payload = {}) => {
   token.status = "CONSULTING";
   token.department = selectedDepartment;
   await token.save();
-  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+  return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+};
+
+const POST_CONSULT_PLAN_IDS = new Set(["labs", "treatment", "pharmacy", "billing"]);
+
+const normalizePostConsultPlans = (payload = {}) => {
+  const raw = payload?.post_consult_plans;
+  let plans = [];
+  if (Array.isArray(raw)) {
+    plans = raw
+      .map((p) => String(p).trim())
+      .filter((p) => POST_CONSULT_PLAN_IDS.has(p));
+  }
+  if (plans.length === 0 && payload?.labs_ordered === true) {
+    plans = ["labs"];
+  }
+  return [...new Set(plans)];
 };
 
 export const endConsulting = async (tokenId = "", payload = {}) => {
@@ -135,96 +197,337 @@ export const endConsulting = async (tokenId = "", payload = {}) => {
   const now = new Date();
   const note = String(payload?.consult_note ?? "").trim();
   const nextDepartment = String(payload?.next_department ?? "").trim();
-  const labsOrdered = Boolean(payload?.labs_ordered);
+  const plans = normalizePostConsultPlans(payload);
+  const labsOrdered = plans.includes("labs");
   const patch = {
     consult_end: now,
     consult_note: note,
-    referred_department: nextDepartment
+    referred_department: nextDepartment,
+    labs_ordered: labsOrdered,
+    post_consult_plans: plans
   };
-  if (labsOrdered) {
-    patch.billing_start = now;
-  }
   const tracking = await updateTracking(tokenId, patch);
   if (nextDepartment) {
     token.department = nextDepartment;
     await token.save();
   }
-  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+  return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
 };
 
 /** Patient paid at billing after consult (labs/tests path). */
-export const recordBillingPayment = async (tokenId = "") => {
+export const recordBillingPayment = async (tokenId = "", payload = {}) => {
   const token = await getTokenOrThrow(tokenId);
-  if (token.status !== "CONSULTING") {
-    throw new ApiError("Payment can only be recorded during consultation follow-up", 400);
-  }
   const tracking = await ensureTrackingRecord(tokenId);
-  if (!tracking.billing_start) {
-    throw new ApiError("No billing phase is active for this token", 400);
+  const amount = Number(payload?.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError("A valid payment amount is required", 400);
   }
-  if (tracking.billing_end) {
-    throw new ApiError("Payment has already been recorded", 400);
+  const note = String(payload?.note ?? "").trim();
+  const label = String(payload?.billing_label ?? "")
+    .trim()
+    .toLowerCase();
+  const allowedLabels = new Set(["", "lab", "pharmacy", "treatment"]);
+  if (!allowedLabels.has(label)) {
+    throw new ApiError("Invalid billing label. Use lab, pharmacy, or treatment", 400);
   }
+  const existingPayments = normalizeBillingPayments(tracking.billing_payments);
   const now = new Date();
-  const next = await updateTracking(tokenId, { billing_end: now });
-  return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  const effectiveBillingStart = tracking.billing_start ? new Date(tracking.billing_start) : now;
+  const nextPayments = [...existingPayments, { amount, paid_at: now, note, label }];
+  const paidAmount = sumBillingPayments(nextPayments);
+  let elapsedMs = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+  const segmentMs = Math.max(now.getTime() - effectiveBillingStart.getTime(), 0);
+  elapsedMs += Number.isNaN(segmentMs) ? 0 : segmentMs;
+  const patch = {
+    billing_start: null,
+    billing_end: now,
+    billing_elapsed_ms: elapsedMs,
+    billing_payments: nextPayments,
+    billing_paid_amount: paidAmount
+  };
+  const next = await updateTracking(tokenId, patch);
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
-/** Lab work begins (after billing / queue). */
+/** Flexible mode: billing desk can start billing in any token status. */
+export const startBillingPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+  const paidAmount = sumBillingPayments(existingPayments);
+  if (tracking.billing_start && !tracking.billing_end) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = new Date();
+  const patch = {
+    billing_start: now,
+    billing_end: null,
+    billing_elapsed_ms: Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0),
+    billing_payments: existingPayments,
+    billing_paid_amount: paidAmount
+  };
+  const next = await updateTracking(tokenId, patch);
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+/** Stop billing timer without closing payment lifecycle. */
+export const stopBillingPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  if (!tracking.billing_start || tracking.billing_end) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = Date.now();
+  const started = new Date(tracking.billing_start).getTime();
+  const segmentMs = Number.isNaN(started) ? 0 : Math.max(now - started, 0);
+  const elapsedMs = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0) + segmentMs;
+  const next = await updateTracking(tokenId, { billing_start: null, billing_elapsed_ms: elapsedMs });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+/** Explicitly end billing after payments are done. */
+export const endBillingPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const hasBillingStarted =
+    Boolean(tracking.billing_start) ||
+    (Number(tracking.billing_elapsed_ms ?? 0) || 0) > 0 ||
+    normalizeBillingPayments(tracking.billing_payments).length > 0;
+  if (!hasBillingStarted) {
+    throw new ApiError("Start billing before ending it", 400);
+  }
+  if (tracking.billing_end) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = new Date();
+  let elapsedMs = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+  if (tracking.billing_start) {
+    const segmentMs = Math.max(now.getTime() - new Date(tracking.billing_start).getTime(), 0);
+    elapsedMs += Number.isNaN(segmentMs) ? 0 : segmentMs;
+  }
+  const next = await updateTracking(tokenId, {
+    billing_start: null,
+    billing_end: now,
+    billing_elapsed_ms: elapsedMs
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+/** Flexible mode: pharmacy desk can start/stop until explicitly ended. */
+export const startPharmacyPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  if (token.status !== "CONSULTING") {
+    throw new ApiError("Pharmacy can only run during consultation follow-up", 400);
+  }
+  const tracking = await ensureTrackingRecord(tokenId);
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before starting pharmacy", 400);
+  }
+  if (tracking.pharmacy_start) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = new Date();
+  const billingPatch = {};
+  if (!tracking.billing_start || tracking.billing_end) {
+    const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+    const paidAmount = sumBillingPayments(existingPayments);
+    billingPatch.billing_start = now;
+    billingPatch.billing_end = null;
+    billingPatch.billing_elapsed_ms = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+    billingPatch.billing_payments = existingPayments;
+    billingPatch.billing_paid_amount = paidAmount;
+  }
+  const next = await updateTracking(tokenId, {
+    pharmacy_start: now,
+    pharmacy_end: null,
+    pharmacy_logs: appendWorkflowStart(tracking.pharmacy_logs, now),
+    pharmacy_elapsed_ms: Math.max(0, Number(tracking.pharmacy_elapsed_ms ?? 0) || 0),
+    ...billingPatch
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+export const stopPharmacyPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  if (!tracking.pharmacy_start || tracking.pharmacy_end) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = Date.now();
+  const started = new Date(tracking.pharmacy_start).getTime();
+  const segmentMs = Number.isNaN(started) ? 0 : Math.max(now - started, 0);
+  const elapsedMs = Math.max(0, Number(tracking.pharmacy_elapsed_ms ?? 0) || 0) + segmentMs;
+  const next = await updateTracking(tokenId, { pharmacy_start: null, pharmacy_elapsed_ms: elapsedMs });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+export const endPharmacyPhase = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const hasPharmacyStarted =
+    Boolean(tracking.pharmacy_start) || (Number(tracking.pharmacy_elapsed_ms ?? 0) || 0) > 0;
+  if (!hasPharmacyStarted) {
+    throw new ApiError("Start pharmacy before ending it", 400);
+  }
+  if (tracking.pharmacy_end && !tracking.pharmacy_start) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = new Date();
+  let elapsedMs = Math.max(0, Number(tracking.pharmacy_elapsed_ms ?? 0) || 0);
+  if (tracking.pharmacy_start) {
+    const segmentMs = Math.max(now.getTime() - new Date(tracking.pharmacy_start).getTime(), 0);
+    elapsedMs += Number.isNaN(segmentMs) ? 0 : segmentMs;
+  }
+  const next = await updateTracking(tokenId, {
+    pharmacy_start: null,
+    pharmacy_end: now,
+    pharmacy_logs: closeWorkflowLastOpen(tracking.pharmacy_logs, now),
+    pharmacy_elapsed_ms: elapsedMs,
+    ...(tracking.billing_start
+      ? {
+          billing_start: null,
+          billing_end: now,
+          billing_elapsed_ms:
+            Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0) +
+            Math.max(now.getTime() - new Date(tracking.billing_start).getTime(), 0)
+        }
+      : {})
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+/**
+ * Add lab workflow after consult (e.g. patient did pharmacy first, then needs tests).
+ * Idempotent if labs are already ordered.
+ */
+export const orderLabsAfterConsult = async (tokenId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  if (token.status !== "CONSULTING") {
+    throw new ApiError("Token is not in consultation", 400);
+  }
+  const tracking = await ensureTrackingRecord(tokenId);
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation first", 400);
+  }
+  if (tracking.lab_end) {
+    throw new ApiError("Lab path is already completed for this visit", 400);
+  }
+  if (tracking.labs_ordered) {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+  }
+  const now = new Date();
+  const existing = Array.isArray(tracking.post_consult_plans) ? tracking.post_consult_plans : [];
+  const cleaned = existing.map(String).filter((p) => POST_CONSULT_PLAN_IDS.has(p));
+  const plans = [...new Set([...cleaned, "labs"])];
+  const needsBillingDesk =
+    plans.includes("labs") || plans.includes("pharmacy") || plans.includes("billing");
+  const patch = {
+    labs_ordered: true,
+    post_consult_plans: plans
+  };
+  if (needsBillingDesk) {
+    if (!tracking.billing_end) {
+      if (!tracking.billing_start) {
+        patch.billing_start = now;
+        patch.billing_elapsed_ms = 0;
+      }
+    } else {
+      const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+      const paidAmount = sumBillingPayments(existingPayments);
+      patch.billing_start = now;
+      patch.billing_end = null;
+      patch.billing_elapsed_ms = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+      patch.billing_payments = existingPayments;
+      patch.billing_paid_amount = paidAmount;
+    }
+  }
+  const next = await updateTracking(tokenId, patch);
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+/** Lab work begins (clinical path; billing is tracked separately). */
 export const startLabTesting = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
   if (token.status !== "CONSULTING") {
     throw new ApiError("Lab can only start during consultation follow-up", 400);
   }
   const tracking = await ensureTrackingRecord(tokenId);
-  if (!tracking.billing_start) {
-    throw new ApiError("Labs were not ordered for this visit", 400);
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before starting lab testing", 400);
   }
-  if (!tracking.billing_end) {
-    throw new ApiError("Record payment before starting lab testing", 400);
-  }
-  if (tracking.lab_start) {
+  if (tracking.lab_start && !tracking.lab_end) {
     throw new ApiError("Lab testing has already started", 400);
   }
   const now = new Date();
-  const next = await updateTracking(tokenId, { lab_start: now });
-  return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  const billingPatch = {};
+  if (!tracking.billing_start || tracking.billing_end) {
+    const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+    const paidAmount = sumBillingPayments(existingPayments);
+    billingPatch.billing_start = now;
+    billingPatch.billing_end = null;
+    billingPatch.billing_elapsed_ms = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+    billingPatch.billing_payments = existingPayments;
+    billingPatch.billing_paid_amount = paidAmount;
+  }
+  const next = await updateTracking(tokenId, {
+    lab_start: now,
+    lab_end: null,
+    labs_ordered: true,
+    lab_logs: appendWorkflowStart(tracking.lab_logs, now),
+    ...billingPatch
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
 export const endLabTesting = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
-  if (token.status !== "CONSULTING") {
-    throw new ApiError("Lab can only be completed during consultation follow-up", 400);
+  if (token.status === "COMPLETED") {
+    throw new ApiError("Cannot complete lab after visit is completed", 400);
   }
   const tracking = await ensureTrackingRecord(tokenId);
   if (!tracking.lab_start) {
     throw new ApiError("Lab testing has not started", 400);
   }
-  if (tracking.lab_end) {
+  if (tracking.lab_end && !tracking.lab_start) {
     throw new ApiError("Lab testing has already ended", 400);
   }
   const now = new Date();
-  const next = await updateTracking(tokenId, { lab_end: now });
-  return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  const next = await updateTracking(tokenId, {
+    lab_end: now,
+    lab_logs: closeWorkflowLastOpen(tracking.lab_logs, now)
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
 export const startTreatment = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
   const tracking = await ensureTrackingRecord(tokenId);
-  if (token.status !== "CONSULTING") {
-    throw new ApiError("Start treatment is only available when the token is in consultation", 400);
+  if (token.status === "COMPLETED") {
+    throw new ApiError("Completed visit cannot start treatment", 400);
   }
-  if (!tracking.consult_end) {
-    throw new ApiError("End consultation before starting treatment", 400);
-  }
-  if (tracking.billing_start && !tracking.lab_end) {
-    throw new ApiError("Finish billing and lab testing before starting treatment", 400);
+  if (token.status === "IN_TREATMENT") {
+    throw new ApiError("Treatment has already started", 400);
   }
   const now = new Date();
-  const nextTracking = await updateTracking(tokenId, { care_start: now });
+  const billingPatch = {};
+  if (!tracking.billing_start || tracking.billing_end) {
+    const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+    const paidAmount = sumBillingPayments(existingPayments);
+    billingPatch.billing_start = now;
+    billingPatch.billing_end = null;
+    billingPatch.billing_elapsed_ms = Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0);
+    billingPatch.billing_payments = existingPayments;
+    billingPatch.billing_paid_amount = paidAmount;
+  }
+  const nextTracking = await updateTracking(tokenId, {
+    care_start: now,
+    care_end: null,
+    treatment_logs: appendWorkflowStart(tracking.treatment_logs, now),
+    ...billingPatch
+  });
   token.status = "IN_TREATMENT";
   await token.save();
-  return { token, tracking: nextTracking, metrics: calculateTimeMetrics(nextTracking) };
+  return { token, tracking: nextTracking, metrics: calculateTimeMetrics(nextTracking, token.status) };
 };
 
 export const moveTokenToWaiting = async (tokenId = "") => {
@@ -234,16 +537,28 @@ export const moveTokenToWaiting = async (tokenId = "") => {
     waiting_start: now,
     consult_start: null,
     consult_end: null,
+    labs_ordered: false,
+    post_consult_plans: [],
     care_start: null,
     care_end: null,
     billing_start: null,
     billing_end: null,
+    billing_elapsed_ms: 0,
+    billing_total_amount: 0,
+    billing_paid_amount: 0,
+    billing_payments: [],
     lab_start: null,
-    lab_end: null
+    lab_end: null,
+    lab_logs: [],
+    pharmacy_start: null,
+    pharmacy_end: null,
+    pharmacy_elapsed_ms: 0,
+    pharmacy_logs: [],
+    treatment_logs: []
   });
   token.status = "WAITING";
   await token.save();
-  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+  return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
 };
 
 /**
@@ -262,7 +577,7 @@ export const stepBackToken = async (tokenId = "") => {
     token.status = tracking.consult_start ? "CONSULTING" : "WAITING";
     await token.save();
     const next = await ensureTrackingRecord(tokenId);
-    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+    return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
   }
 
   if (token.status === "CONSULTING" && tracking.consult_end) {
@@ -270,13 +585,13 @@ export const stepBackToken = async (tokenId = "") => {
       consult_end: null,
       consult_note: "",
       referred_department: "",
-      billing_start: null,
-      billing_end: null,
+      labs_ordered: false,
+      post_consult_plans: [],
       lab_start: null,
       lab_end: null
     });
     const next = await ensureTrackingRecord(tokenId);
-    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+    return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
   }
 
   if (token.status === "CONSULTING" && tracking.consult_start) {
@@ -284,7 +599,7 @@ export const stepBackToken = async (tokenId = "") => {
     token.status = "WAITING";
     await token.save();
     const next = await ensureTrackingRecord(tokenId);
-    return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+    return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
   }
 
   throw new ApiError("Already at the earliest step (waiting).", 400);
@@ -307,7 +622,7 @@ export const revertTokenToAnchor = async (tokenId = "", anchor = "") => {
   token.status = resolveStatusAfterRevert(nextTracking);
   await token.save();
   const finalTracking = await ensureTrackingRecord(tokenId);
-  return { token, tracking: finalTracking, metrics: calculateTimeMetrics(finalTracking) };
+  return { token, tracking: finalTracking, metrics: calculateTimeMetrics(finalTracking, token.status) };
 };
 
 export const endTreatment = async (tokenId = "") => {
@@ -316,35 +631,57 @@ export const endTreatment = async (tokenId = "") => {
     throw new ApiError("Token is not in treatment", 400);
   }
   const now = new Date();
-  const tracking = await updateTracking(tokenId, { care_end: now });
-  token.status = "COMPLETED";
+  const current = await ensureTrackingRecord(tokenId);
+  const tracking = await updateTracking(tokenId, {
+    care_start: null,
+    care_end: now,
+    treatment_logs: closeWorkflowLastOpen(current.treatment_logs, now)
+  });
+  token.status = "CONSULTING";
   await token.save();
-  return { token, tracking, metrics: calculateTimeMetrics(tracking) };
+  return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
 };
 
-/**
- * Mark visit complete when only consultation was needed (no treatment phase).
- * Requires consultation ended and treatment never started.
- */
 export const completeVisitAfterConsult = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
   const tracking = await ensureTrackingRecord(tokenId);
-  if (token.status !== "CONSULTING") {
-    throw new ApiError("Visit can only be completed from consultation when no treatment has started", 400);
+  if (token.status === "COMPLETED") {
+    return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
   }
-  if (!tracking.consult_end) {
-    throw new ApiError("End consultation before completing the visit", 400);
+  const now = new Date();
+  const patch = {};
+  if (tracking.consult_start && !tracking.consult_end) {
+    patch.consult_end = now;
   }
-  if (tracking.care_start) {
-    throw new ApiError("Treatment has already started; end treatment to complete", 400);
+  if (tracking.lab_start && !tracking.lab_end) {
+    patch.lab_end = now;
+    patch.lab_logs = closeWorkflowLastOpen(tracking.lab_logs, now);
   }
-  if (tracking.billing_start && !tracking.lab_end) {
-    throw new ApiError("Complete billing and lab testing before finishing the visit", 400);
+  if (tracking.pharmacy_start) {
+    const elapsedMs =
+      Math.max(0, Number(tracking.pharmacy_elapsed_ms ?? 0) || 0) +
+      Math.max(now.getTime() - new Date(tracking.pharmacy_start).getTime(), 0);
+    patch.pharmacy_start = null;
+    patch.pharmacy_end = now;
+    patch.pharmacy_elapsed_ms = elapsedMs;
+    patch.pharmacy_logs = closeWorkflowLastOpen(tracking.pharmacy_logs, now);
   }
+  if (tracking.billing_start) {
+    const elapsedMs =
+      Math.max(0, Number(tracking.billing_elapsed_ms ?? 0) || 0) +
+      Math.max(now.getTime() - new Date(tracking.billing_start).getTime(), 0);
+    patch.billing_start = null;
+    patch.billing_end = now;
+    patch.billing_elapsed_ms = elapsedMs;
+  }
+  if (tracking.care_start && !tracking.care_end) {
+    patch.care_end = now;
+    patch.treatment_logs = closeWorkflowLastOpen(tracking.treatment_logs, now);
+  }
+  const next = Object.keys(patch).length ? await updateTracking(tokenId, patch) : tracking;
   token.status = "COMPLETED";
   await token.save();
-  const next = await ensureTrackingRecord(tokenId);
-  return { token, tracking: next, metrics: calculateTimeMetrics(next) };
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
 export const branchToken = async (tokenId = "", newDepartment = "") => {
@@ -387,6 +724,46 @@ export const branchToken = async (tokenId = "", newDepartment = "") => {
   return branchedToken.toObject();
 };
 
+const patientIdsMissingStoredName = (tokens = []) =>
+  [
+    ...new Set(
+      tokens
+        .filter((t) => !String(t?.patient_name ?? "").trim())
+        .map((t) => String(t?.patient_id ?? "").trim())
+        .filter(Boolean)
+    )
+  ];
+
+const loadDemographicsByPatientId = async (tokens = []) => {
+  const ids = patientIdsMissingStoredName(tokens);
+  if (!ids.length) {
+    return {};
+  }
+  return fetchPatientDemographics(ids);
+};
+
+const displayPatientName = (token = {}, demoByPatientId = {}) => {
+  const stored = String(token?.patient_name ?? "").trim();
+  if (stored) {
+    return stored;
+  }
+  const pid = String(token?.patient_id ?? "").trim();
+  const fromHis = pid ? String(demoByPatientId[pid]?.name ?? "").trim() : "";
+  if (fromHis) {
+    return fromHis;
+  }
+  return `Patient ${token.patient_id}`;
+};
+
+const displayPatientPhone = (token = {}, demoByPatientId = {}) => {
+  const stored = String(token?.patient_phone ?? "").trim();
+  if (stored) {
+    return stored;
+  }
+  const pid = String(token?.patient_id ?? "").trim();
+  return pid ? String(demoByPatientId[pid]?.phone ?? "").trim() : "";
+};
+
 const matchesLiveSearch = (row = {}, search = "") => {
   const q = String(search ?? "").toLowerCase().trim();
   if (!q) {
@@ -412,12 +789,14 @@ export const getLiveQueue = async (filters = {}) => {
     .sort({ created_at: -1 })
     .lean();
 
+  const demoByPatientId = await loadDemographicsByPatientId(activeTokens);
+
   const tokenIds = activeTokens.map((token) => token.token_id);
   const trackingRows = await TimeTracking.find({ token_id: { $in: tokenIds } }).lean();
-  sendDebugLog("H3", "Live queue data sources resolved (mongo-only)", {
+  sendDebugLog("H3", "Live queue data sources resolved", {
     tokenCount: activeTokens.length,
     trackingCount: trackingRows.length,
-    hasSqlDemographicsFetch: false
+    hisDemographicsPatients: Object.keys(demoByPatientId ?? {}).length
   });
   const trackingByToken = trackingRows.reduce((acc, row) => {
     acc[row.token_id] = row;
@@ -432,8 +811,8 @@ export const getLiveQueue = async (filters = {}) => {
         token_id: token.token_id,
         patient_id: token.patient_id,
         visit_id: token.visit_id,
-        name: token.patient_name || `Patient ${token.patient_id}`,
-        phone: token.patient_phone || "",
+        name: displayPatientName(token, demoByPatientId),
+        phone: displayPatientPhone(token, demoByPatientId),
         department: token.department,
         status: normalizedStatus,
         waiting_start: tracking.waiting_start ?? null,
@@ -443,6 +822,12 @@ export const getLiveQueue = async (filters = {}) => {
         treatment_end: tracking.care_end ?? null,
         billing_start: tracking.billing_start ?? null,
         billing_end: tracking.billing_end ?? null,
+        pharmacy_start: tracking.pharmacy_start ?? null,
+        pharmacy_end: tracking.pharmacy_end ?? null,
+        labs_ordered: Boolean(tracking.labs_ordered),
+        post_consult_plans: Array.isArray(tracking.post_consult_plans)
+          ? tracking.post_consult_plans
+          : [],
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
         created_at: token.created_at,
@@ -463,6 +848,8 @@ export const getCompletedTokens = async (filters = {}) => {
     .sort({ updated_at: -1, created_at: -1 })
     .lean();
 
+  const demoByPatientId = await loadDemographicsByPatientId(completedTokens);
+
   const tokenIds = completedTokens.map((token) => token.token_id);
   const trackingRows = await TimeTracking.find({ token_id: { $in: tokenIds } }).lean();
   const trackingByToken = trackingRows.reduce((acc, row) => {
@@ -477,8 +864,8 @@ export const getCompletedTokens = async (filters = {}) => {
         token_id: token.token_id,
         patient_id: token.patient_id,
         visit_id: token.visit_id,
-        name: token.patient_name || `Patient ${token.patient_id}`,
-        phone: token.patient_phone || "",
+        name: displayPatientName(token, demoByPatientId),
+        phone: displayPatientPhone(token, demoByPatientId),
         department: token.department,
         status: token.status,
         waiting_start: tracking.waiting_start ?? null,
@@ -488,6 +875,12 @@ export const getCompletedTokens = async (filters = {}) => {
         treatment_end: tracking.care_end ?? null,
         billing_start: tracking.billing_start ?? null,
         billing_end: tracking.billing_end ?? null,
+        pharmacy_start: tracking.pharmacy_start ?? null,
+        pharmacy_end: tracking.pharmacy_end ?? null,
+        labs_ordered: Boolean(tracking.labs_ordered),
+        post_consult_plans: Array.isArray(tracking.post_consult_plans)
+          ? tracking.post_consult_plans
+          : [],
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
         created_at: token.created_at,
@@ -500,14 +893,15 @@ export const getCompletedTokens = async (filters = {}) => {
 export const getTokenDetail = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
   const tracking = await ensureTrackingRecord(token.token_id);
+  const demoByPatientId = await loadDemographicsByPatientId([token]);
   const patient = {
-    name: token.patient_name || `Patient ${token.patient_id}`,
-    phone: token.patient_phone || ""
+    name: displayPatientName(token, demoByPatientId),
+    phone: displayPatientPhone(token, demoByPatientId)
   };
   return {
     token,
     patient,
     tracking,
-    metrics: calculateTimeMetrics(tracking)
+    metrics: calculateTimeMetrics(tracking, token.status)
   };
 };

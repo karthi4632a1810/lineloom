@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchDepartmentFunnel } from "../services/journeyService";
-import { fetchActiveDepartments } from "../services/departmentService";
+import { fetchHisDepartments } from "../services/dashboardService";
 import { fetchAlertRecommendations } from "../services/alertService";
 import {
   fetchIntelligenceSummary,
@@ -101,7 +101,7 @@ export const DepartmentAnalyticsPage = () => {
   };
 
   useEffect(() => {
-    fetchActiveDepartments()
+    fetchHisDepartments()
       .then((list) => setDepartments(Array.isArray(list) ? list : []))
       .catch(() => setDepartments([]));
   }, []);
@@ -128,11 +128,17 @@ export const DepartmentAnalyticsPage = () => {
               onChange={(event) => setDepartment(event.target.value)}
             >
               <option value="">All departments</option>
-              {departments.map((d) => (
-                <option key={d._id ?? d.name} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
+              {departments.map((d) => {
+                const deptName = String(d?.dept_name ?? d?.department ?? "").trim();
+                if (!deptName) {
+                  return null;
+                }
+                return (
+                  <option key={d.dept_id ?? deptName} value={deptName}>
+                    {deptName}
+                  </option>
+                );
+              })}
             </select>
           </label>
           <button type="button" onClick={load} disabled={loading}>
