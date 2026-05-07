@@ -249,6 +249,67 @@ export const recordBillingPayment = async (tokenId = "", payload = {}) => {
   return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
+export const updateBillingPayment = async (tokenId = "", paymentId = "", payload = {}) => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const resolvedPaymentId = String(paymentId ?? "").trim();
+  if (!resolvedPaymentId) {
+    throw new ApiError("Payment id is required", 400);
+  }
+  const amount = Number(payload?.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError("A valid payment amount is required", 400);
+  }
+  const note = String(payload?.note ?? "").trim();
+  const label = String(payload?.billing_label ?? "")
+    .trim()
+    .toLowerCase();
+  const allowedLabels = new Set(["", "lab", "pharmacy", "treatment"]);
+  if (!allowedLabels.has(label)) {
+    throw new ApiError("Invalid billing label. Use lab, pharmacy, or treatment", 400);
+  }
+  const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+  const nextPayments = existingPayments.map((payment) => {
+    const id = String(payment?._id ?? "").trim();
+    if (id !== resolvedPaymentId) {
+      return payment;
+    }
+    return { ...payment, amount, note, label };
+  });
+  const updated = nextPayments.some((payment) => String(payment?._id ?? "").trim() === resolvedPaymentId);
+  if (!updated) {
+    throw new ApiError("Billing payment not found", 404);
+  }
+  const paidAmount = sumBillingPayments(nextPayments);
+  const next = await updateTracking(tokenId, {
+    billing_payments: nextPayments,
+    billing_paid_amount: paidAmount
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
+export const deleteBillingPayment = async (tokenId = "", paymentId = "") => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const resolvedPaymentId = String(paymentId ?? "").trim();
+  if (!resolvedPaymentId) {
+    throw new ApiError("Payment id is required", 400);
+  }
+  const existingPayments = normalizeBillingPayments(tracking.billing_payments);
+  const nextPayments = existingPayments.filter(
+    (payment) => String(payment?._id ?? "").trim() !== resolvedPaymentId
+  );
+  if (nextPayments.length === existingPayments.length) {
+    throw new ApiError("Billing payment not found", 404);
+  }
+  const paidAmount = sumBillingPayments(nextPayments);
+  const next = await updateTracking(tokenId, {
+    billing_payments: nextPayments,
+    billing_paid_amount: paidAmount
+  });
+  return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
+};
+
 /** Flexible mode: billing desk can start billing in any token status. */
 export const startBillingPhase = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);

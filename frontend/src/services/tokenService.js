@@ -48,6 +48,10 @@ export const endPharmacyRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/end-pharmacy`);
 export const recordBillingPaymentRequest = async (tokenId = "", payload = {}) =>
   apiClient.post(`/tokens/${tokenId}/record-billing-payment`, payload);
+export const updateBillingPaymentRequest = async (tokenId = "", paymentId = "", payload = {}) =>
+  apiClient.patch(`/tokens/${tokenId}/billing-payments/${paymentId}`, payload);
+export const deleteBillingPaymentRequest = async (tokenId = "", paymentId = "") =>
+  apiClient.delete(`/tokens/${tokenId}/billing-payments/${paymentId}`);
 export const startLabRequest = async (tokenId = "") =>
   apiClient.post(`/tokens/${tokenId}/start-lab`);
 export const endLabRequest = async (tokenId = "") =>

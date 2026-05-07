@@ -6,6 +6,7 @@ import { fetchActiveDepartments } from "../services/departmentService";
 import { fetchHisDepartments } from "../services/dashboardService";
 import {
   completeVisitAfterConsultRequest,
+  deleteBillingPaymentRequest,
   endCareRequest,
   endConsultRequest,
   endLabRequest,
@@ -20,6 +21,7 @@ import {
   startCareRequest,
   startConsultRequest,
   startLabRequest,
+  updateBillingPaymentRequest,
   revertTokenRequest
 } from "../services/tokenService";
 import { fetchTokenJourney } from "../services/journeyService";
@@ -349,6 +351,7 @@ export const TokenDetailPage = () => {
   const [showEndConsultConfirm, setShowEndConsultConfirm] = useState(false);
   const [showCompleteVisitConfirm, setShowCompleteVisitConfirm] = useState(false);
   const [stepBackRow, setStepBackRow] = useState(null);
+  const isAdmin = String(localStorage.getItem("auth_role") ?? "").toLowerCase() === "admin";
 
   useEffect(() => {
     fetchActiveDepartments()
@@ -753,6 +756,75 @@ export const TokenDetailPage = () => {
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to add pharmacy billing payment");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const editBillingPayment = async (payment = null) => {
+    if (!isAdmin || !payment?._id) {
+      return;
+    }
+    const amountInput = window.prompt("Edit payment amount", String(payment?.amount ?? ""));
+    if (amountInput == null) {
+      return;
+    }
+    const amount = Number(amountInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setActionError("Enter a valid payment amount.");
+      return;
+    }
+    const noteInput = window.prompt("Edit payment note (optional)", String(payment?.note ?? ""));
+    if (noteInput == null) {
+      return;
+    }
+    const labelInput = window.prompt(
+      "Edit label (lab/pharmacy/treatment or empty)",
+      String(payment?.label ?? "")
+    );
+    if (labelInput == null) {
+      return;
+    }
+    const id = String(token?.token_id ?? resolvedTokenId ?? "");
+    if (!id) {
+      return;
+    }
+    setActionError("");
+    setIsActing(true);
+    try {
+      await updateBillingPaymentRequest(id, payment._id, {
+        amount,
+        note: noteInput,
+        billing_label: String(labelInput).trim().toLowerCase()
+      });
+      await refreshTokenViews();
+      window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
+    } catch (requestError) {
+      setActionError(requestError?.message ?? "Unable to update payment");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const removeBillingPayment = async (payment = null) => {
+    if (!isAdmin || !payment?._id) {
+      return;
+    }
+    if (!window.confirm("Delete this payment?")) {
+      return;
+    }
+    const id = String(token?.token_id ?? resolvedTokenId ?? "");
+    if (!id) {
+      return;
+    }
+    setActionError("");
+    setIsActing(true);
+    try {
+      await deleteBillingPaymentRequest(id, payment._id);
+      await refreshTokenViews();
+      window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
+    } catch (requestError) {
+      setActionError(requestError?.message ?? "Unable to delete payment");
     } finally {
       setIsActing(false);
     }
@@ -1437,6 +1509,7 @@ export const TokenDetailPage = () => {
                       <th>Billing elapsed time</th>
                       <th>Overall elapsed time</th>
                       <th>Note</th>
+                      {isAdmin ? <th>Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1470,6 +1543,18 @@ export const TokenDetailPage = () => {
                             <td>{billingElapsed}</td>
                             <td>{overallElapsed}</td>
                             <td>{String(payment?.note ?? "").trim() || "--"}</td>
+                            {isAdmin ? (
+                              <td>
+                                <div className="action-group">
+                                  <button type="button" onClick={() => editBillingPayment(payment)}>
+                                    Edit
+                                  </button>
+                                  <button type="button" onClick={() => removeBillingPayment(payment)}>
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            ) : null}
                           </tr>
                         );
                       })()

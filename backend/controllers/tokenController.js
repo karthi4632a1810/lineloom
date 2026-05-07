@@ -7,6 +7,7 @@ import {
   createToken,
   endConsulting,
   endLabTesting,
+  deleteBillingPayment,
   endPharmacyPhase,
   endTreatment,
   getLiveQueue,
@@ -21,6 +22,7 @@ import {
   stopPharmacyPhase,
   startConsulting,
   orderLabsAfterConsult,
+  updateBillingPayment,
   startLabTesting,
   startTreatment,
   revertTokenToAnchor,
@@ -53,6 +55,12 @@ const recordBillingSchema = z.object({
   amount: z.coerce.number().positive("amount must be greater than 0"),
   note: z.string().optional(),
   billing_label: z.enum(["lab", "pharmacy", "treatment"]).optional()
+});
+
+const updateBillingPaymentSchema = z.object({
+  amount: z.coerce.number().positive("amount must be greater than 0"),
+  note: z.string().optional(),
+  billing_label: z.enum(["lab", "pharmacy", "treatment", ""]).optional()
 });
 
 const revertAnchorSchema = z.object({
@@ -104,6 +112,17 @@ export const recordBillingPaymentHandler = asyncHandler(async (req, res) => {
   const input = recordBillingSchema.parse(req.body ?? {});
   const result = await recordBillingPayment(getTokenId(req), input);
   return sendSuccess(res, result, "Payment recorded");
+});
+
+export const updateBillingPaymentHandler = asyncHandler(async (req, res) => {
+  const input = updateBillingPaymentSchema.parse(req.body ?? {});
+  const result = await updateBillingPayment(getTokenId(req), req.params.paymentId, input);
+  return sendSuccess(res, result, "Payment updated");
+});
+
+export const deleteBillingPaymentHandler = asyncHandler(async (req, res) => {
+  const result = await deleteBillingPayment(getTokenId(req), req.params.paymentId);
+  return sendSuccess(res, result, "Payment deleted");
 });
 
 export const startBillingHandler = asyncHandler(async (req, res) => {

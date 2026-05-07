@@ -9,11 +9,13 @@ import {
   orderLabs,
   endLab,
   endPharmacyHandler,
+  deleteBillingPaymentHandler,
   getCompletedTokensHandler,
   getLiveQueueHandler,
   getTokenJourneyHandler,
   getTokenDetailHandler,
   recordBillingPaymentHandler,
+  updateBillingPaymentHandler,
   startBillingHandler,
   startCare,
   startConsult,
@@ -73,6 +75,16 @@ router.post(
   "/:id/record-billing-payment",
   authorizeRoles("admin", "doctor", "nurse"),
   recordBillingPaymentHandler
+);
+router.patch(
+  "/:id/billing-payments/:paymentId",
+  authorizeRoles("admin"),
+  updateBillingPaymentHandler
+);
+router.delete(
+  "/:id/billing-payments/:paymentId",
+  authorizeRoles("admin"),
+  deleteBillingPaymentHandler
 );
 router.post(
   "/:id/start-pharmacy",
