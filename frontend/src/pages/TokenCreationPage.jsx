@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchActiveDepartments } from "../services/departmentService";
+import { fetchHisDepartments } from "../services/dashboardService";
 import { searchHisPatients } from "../services/hisService";
 import { createTokenRequest } from "../services/tokenService";
 
@@ -57,10 +57,22 @@ export const TokenCreationPage = () => {
   const requestCounterRef = useRef(0);
 
   useEffect(() => {
-    fetchActiveDepartments()
+    fetchHisDepartments()
       .then((list) => setDepartmentCatalog(Array.isArray(list) ? list : []))
       .catch(() => setDepartmentCatalog([]));
   }, []);
+
+  const createTokenDepartments = useMemo(
+    () =>
+      [
+        ...new Set(
+          departmentCatalog
+            .map((d) => String(d?.dept_name ?? d?.department ?? d?.name ?? "").trim())
+            .filter(Boolean)
+        )
+      ].sort((a, b) => a.localeCompare(b)),
+    [departmentCatalog]
+  );
 
   const deptOptions = useMemo(() => {
     const values = [...new Set(results.map((row) => String(row?.dept_name ?? "").trim()).filter(Boolean))];
@@ -144,8 +156,7 @@ export const TokenCreationPage = () => {
   const handleOpenCreateModal = (patient = null) => {
     setSelectedPatient(patient);
     const suggested = String(patient?.department ?? "").trim();
-    const names = departmentCatalog.map((d) => d.name);
-    const initialDept = names.includes(suggested) ? suggested : "";
+    const initialDept = createTokenDepartments.includes(suggested) ? suggested : "";
     setForm({
       patient_id: patient?.patient_id ?? "",
       visit_id: patient?.visit_id ?? "",
@@ -415,9 +426,9 @@ export const TokenCreationPage = () => {
                   required
                 >
                   <option value="">Select department</option>
-                  {departmentCatalog.map((dept) => (
-                    <option key={dept._id ?? dept.name} value={dept.name}>
-                      {dept.name}
+                  {createTokenDepartments.map((departmentName) => (
+                    <option key={departmentName} value={departmentName}>
+                      {departmentName}
                     </option>
                   ))}
                 </select>

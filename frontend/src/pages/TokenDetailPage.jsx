@@ -890,7 +890,7 @@ export const TokenDetailPage = () => {
               <span className="patient-chip">{token.patient_id}</span>
             </div>
             <p className="patient-meta">
-              {token.department} Department • Token #{token.visit_id}
+              {token.department} • Queue #{token.department_queue_no ?? "—"} • Visit {token.visit_id}
             </p>
             <div className="patient-tags">
               <span className={`status-chip ${visitPhaseChipClass}`} title={`API status: ${token.status}`}>
@@ -1176,8 +1176,6 @@ export const TokenDetailPage = () => {
                     onClick={() => runTokenAction("end_pharmacy")}
                     disabled={
                       isActing ||
-                      token.status !== "CONSULTING" ||
-                      !tracking.consult_end ||
                       !tracking.pharmacy_start
                     }
                   >
@@ -1231,6 +1229,8 @@ export const TokenDetailPage = () => {
                     onClick={() => runTokenAction("start_treatment")}
                     disabled={
                       isActing ||
+                      token.status !== "CONSULTING" ||
+                      !tracking.consult_end ||
                       token.status === "COMPLETED" ||
                       token.status === "IN_TREATMENT"
                     }

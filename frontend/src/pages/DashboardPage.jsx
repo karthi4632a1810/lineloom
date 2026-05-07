@@ -442,7 +442,7 @@ export const DashboardPage = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, queueIndex) => (
+              {rows.map((row) => (
                 <tr
                   key={row.token_id}
                   className="clickable-row"
@@ -467,7 +467,9 @@ export const DashboardPage = () => {
                   }}
                 >
                   <td className="col-token-no">
-                    <span className="token-queue-no">#{queueIndex + 1}</span>
+                    <span className="token-queue-no" title={`${row.department} queue number`}>
+                      #{row.department_queue_no ?? "—"}
+                    </span>
                     <span className="token-queue-id" title={row.token_id}>
                       {row.token_id}
                     </span>

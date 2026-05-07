@@ -109,7 +109,7 @@ export const CompletedQueuePage = () => {
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((row, queueIndex) => (
+              {visibleRows.map((row) => (
                 <tr
                   key={row.token_id}
                   className="clickable-row"
@@ -122,7 +122,9 @@ export const CompletedQueuePage = () => {
                   }}
                 >
                   <td className="col-token-no">
-                    <span className="token-queue-no">#{queueIndex + 1}</span>
+                    <span className="token-queue-no" title={`${row.department} queue number at visit`}>
+                      #{row.department_queue_no ?? "—"}
+                    </span>
                     <span className="token-queue-id" title={row.token_id}>
                       {row.token_id}
                     </span>

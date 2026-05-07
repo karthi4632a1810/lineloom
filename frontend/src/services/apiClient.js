@@ -1,6 +1,8 @@
 import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+const MAX_TIMEOUT_RETRIES = 3;
+const RETRY_DELAY_MS = 300;
 
 /** Avoid multiple redirects when several requests fail with 401 at once */
 let authRedirectScheduled = false;
@@ -14,6 +16,8 @@ export const apiClient = axios.create({
   timeout: 10000
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem("auth_token") ?? "";
   if (token) {
@@ -24,7 +28,19 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error?.config;
+    const isTimeoutError = error?.code === "ECONNABORTED";
+
+    if (isTimeoutError && config) {
+      config.__timeoutRetryCount = config.__timeoutRetryCount ?? 0;
+      if (config.__timeoutRetryCount < MAX_TIMEOUT_RETRIES) {
+        config.__timeoutRetryCount += 1;
+        await sleep(RETRY_DELAY_MS * config.__timeoutRetryCount);
+        return apiClient.request(config);
+      }
+    }
+
     const status = error?.response?.status;
     const requestUrl = String(error?.config?.url ?? "");
     const isAuthRoute =

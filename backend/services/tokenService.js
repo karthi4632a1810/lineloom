@@ -12,7 +12,7 @@ import {
   detectVisitStage,
   resolveStatusAfterRevert
 } from "./revertMilestones.js";
-import { fetchPatientDemographics } from "./hisService.js";
+import { fetchHisDepartments, fetchPatientDemographics } from "./hisService.js";
 
 const sendDebugLog = (hypothesisId = "", message = "", data = {}) => {
   // #region agent log
@@ -108,6 +108,38 @@ const closeWorkflowLastOpen = (logs = [], end = new Date()) => {
   return normalized;
 };
 
+const isKnownDepartmentName = async (name = "") => {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) {
+    return false;
+  }
+  const activeOk = await isActiveDepartmentName(trimmed);
+  if (activeOk) {
+    return true;
+  }
+  const hisDepartments = await fetchHisDepartments().catch(() => []);
+  return hisDepartments.some(
+    (item) => String(item?.dept_name ?? item?.department ?? "").trim() === trimmed
+  );
+};
+
+const isDuplicateKeyError = (error) =>
+  error?.code === 11000 || String(error?.message ?? "").includes("E11000 duplicate key");
+
+/** Next display number for a department: max among active tokens + 1, or 1 if none. */
+const peekNextDepartmentQueueNo = async (department = "") => {
+  const dept = String(department ?? "").trim();
+  const agg = await Token.aggregate([
+    { $match: { department: dept, status: { $ne: "COMPLETED" } } },
+    { $group: { _id: null, maxNo: { $max: "$department_queue_no" } } }
+  ]);
+  const maxNo = agg[0]?.maxNo;
+  if (maxNo == null || !Number.isFinite(Number(maxNo)) || Number(maxNo) < 1) {
+    return 1;
+  }
+  return Number(maxNo) + 1;
+};
+
 export const createToken = async (input = {}) => {
   const patient_id = String(input?.patient_id ?? "").trim();
   const visit_id = String(input?.visit_id ?? "").trim();
@@ -119,9 +151,9 @@ export const createToken = async (input = {}) => {
     throw new ApiError("patient_id, visit_id and department are required", 400);
   }
 
-  const deptOk = await isActiveDepartmentName(department);
+  const deptOk = await isKnownDepartmentName(department);
   if (!deptOk) {
-    throw new ApiError("Invalid or inactive department. Configure departments under admin settings.", 400);
+    throw new ApiError("Invalid department selected", 400);
   }
 
   sendDebugLog("H5", "Create token skips HIS revalidation by design", {
@@ -129,16 +161,31 @@ export const createToken = async (input = {}) => {
     visit_id
   });
 
-  const token = await Token.create({
-    token_id: generateTokenId(),
-    patient_id,
-    visit_id,
-    patient_name,
-    patient_phone,
-    department,
-    parent_token_id: null,
-    status: "WAITING"
-  });
+  let token = null;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const department_queue_no = await peekNextDepartmentQueueNo(department);
+    try {
+      token = await Token.create({
+        token_id: generateTokenId(),
+        patient_id,
+        visit_id,
+        patient_name,
+        patient_phone,
+        department,
+        parent_token_id: null,
+        status: "WAITING",
+        department_queue_no
+      });
+      break;
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+    }
+  }
+  if (!token) {
+    throw new ApiError("Could not assign a queue number for this department. Try again.", 503);
+  }
 
   await TimeTracking.create({
     token_id: token.token_id,
@@ -161,9 +208,9 @@ export const startConsulting = async (tokenId = "", payload = {}) => {
   if (!selectedDepartment) {
     throw new ApiError("department is required to start consultation", 400);
   }
-  const deptOk = await isActiveDepartmentName(selectedDepartment);
+  const deptOk = await isKnownDepartmentName(selectedDepartment);
   if (!deptOk) {
-    throw new ApiError("Invalid or inactive department. Choose a department from admin settings.", 400);
+    throw new ApiError("Invalid department selected", 400);
   }
   const now = new Date();
   const tracking = await updateTracking(tokenId, { consult_start: now });
@@ -569,6 +616,9 @@ export const startTreatment = async (tokenId = "") => {
   if (token.status === "IN_TREATMENT") {
     throw new ApiError("Treatment has already started", 400);
   }
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before starting treatment", 400);
+  }
   const now = new Date();
   const billingPatch = {};
   if (!tracking.billing_start || tracking.billing_end) {
@@ -750,24 +800,39 @@ export const branchToken = async (tokenId = "", newDepartment = "") => {
   if (!newDepartment) {
     throw new ApiError("new_department is required", 400);
   }
-  const branchDeptOk = await isActiveDepartmentName(newDepartment);
+  const branchDeptOk = await isKnownDepartmentName(newDepartment);
   if (!branchDeptOk) {
-    throw new ApiError("Invalid or inactive department for branch", 400);
+    throw new ApiError("Invalid department for branch", 400);
   }
 
   const now = new Date();
   await updateTracking(currentToken.token_id, { break_start: now });
 
-  const branchedToken = await Token.create({
-    token_id: generateTokenId(),
-    patient_id: currentToken.patient_id,
-    visit_id: currentToken.visit_id,
-    patient_name: currentToken.patient_name ?? "",
-    patient_phone: currentToken.patient_phone ?? "",
-    department: newDepartment,
-    parent_token_id: currentToken.token_id,
-    status: "WAITING"
-  });
+  let branchedToken = null;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const department_queue_no = await peekNextDepartmentQueueNo(newDepartment);
+    try {
+      branchedToken = await Token.create({
+        token_id: generateTokenId(),
+        patient_id: currentToken.patient_id,
+        visit_id: currentToken.visit_id,
+        patient_name: currentToken.patient_name ?? "",
+        patient_phone: currentToken.patient_phone ?? "",
+        department: newDepartment,
+        parent_token_id: currentToken.token_id,
+        status: "WAITING",
+        department_queue_no
+      });
+      break;
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+    }
+  }
+  if (!branchedToken) {
+    throw new ApiError("Could not assign a queue number for the branch department. Try again.", 503);
+  }
 
   await TimeTracking.create({
     token_id: branchedToken.token_id,
@@ -835,19 +900,27 @@ const matchesLiveSearch = (row = {}, search = "") => {
     row.patient_id,
     row.visit_id,
     row.name,
-    row.phone
+    row.phone,
+    row.department_queue_no != null ? String(row.department_queue_no) : ""
   ]
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
   return parts.some((value) => value.includes(q));
 };
 
+const normalizeDepartmentName = (value = "") =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
 export const getLiveQueue = async (filters = {}) => {
   const search = String(filters?.search ?? "");
   const departmentFilter = String(filters?.department ?? "").trim();
+  const normalizedDepartmentFilter = normalizeDepartmentName(departmentFilter);
 
   const activeTokens = await Token.find({ status: { $ne: "COMPLETED" } })
-    .sort({ created_at: -1 })
+    .sort({ created_at: 1 })
     .lean();
 
   const demoByPatientId = await loadDemographicsByPatientId(activeTokens);
@@ -892,11 +965,15 @@ export const getLiveQueue = async (filters = {}) => {
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
         created_at: token.created_at,
+        department_queue_no: token.department_queue_no ?? null,
         ...buildTatMetrics(tracking, normalizedStatus)
       };
     })
     .filter((row) => {
-      if (departmentFilter && row.department !== departmentFilter) {
+      if (
+        normalizedDepartmentFilter &&
+        normalizeDepartmentName(row.department) !== normalizedDepartmentFilter
+      ) {
         return false;
       }
       return matchesLiveSearch(row, search);
@@ -945,6 +1022,7 @@ export const getCompletedTokens = async (filters = {}) => {
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
         created_at: token.created_at,
+        department_queue_no: token.department_queue_no ?? null,
         ...buildTatMetrics(tracking, token.status)
       };
     })

@@ -13,7 +13,9 @@ const tokenSchema = new mongoose.Schema(
       type: String,
       enum: ["WAITING", "ACTIVE", "CONSULTING", "IN_TREATMENT", "COMPLETED"],
       default: "WAITING"
-    }
+    },
+    /** Display number for staff; unique among non-completed tokens in the same department. */
+    department_queue_no: { type: Number, default: null, min: 1 }
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
@@ -22,5 +24,16 @@ const tokenSchema = new mongoose.Schema(
 );
 
 tokenSchema.index({ visit_id: 1, department: 1, created_at: -1 });
+/** Prevents two active visits in the same department sharing the same queue number. */
+tokenSchema.index(
+  { department: 1, department_queue_no: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["WAITING", "ACTIVE", "CONSULTING", "IN_TREATMENT"] },
+      department_queue_no: { $gt: 0 }
+    }
+  }
+);
 
 export const Token = mongoose.model("Token", tokenSchema);

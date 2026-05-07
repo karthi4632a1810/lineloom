@@ -34,6 +34,7 @@ const tokenSeeds = [
     department: "General Medicine",
     parent_token_id: null,
     status: "COMPLETED",
+    department_queue_no: 1,
     created_at: makeDate(140),
     tracking: {
       waiting_start: makeDate(138),
@@ -52,6 +53,7 @@ const tokenSeeds = [
     department: "ENT",
     parent_token_id: null,
     status: "CONSULTING",
+    department_queue_no: 1,
     created_at: makeDate(72),
     tracking: {
       waiting_start: makeDate(70),
@@ -70,6 +72,7 @@ const tokenSeeds = [
     department: "Cardiology",
     parent_token_id: "T-SEED-004",
     status: "WAITING",
+    department_queue_no: 1,
     created_at: makeDate(38),
     tracking: {
       waiting_start: makeDate(36),
@@ -88,6 +91,7 @@ const tokenSeeds = [
     department: "Emergency",
     parent_token_id: null,
     status: "CONSULTING",
+    department_queue_no: 1,
     created_at: makeDate(60),
     tracking: {
       waiting_start: makeDate(58),
@@ -106,6 +110,7 @@ const tokenSeeds = [
     department: "General Medicine",
     parent_token_id: null,
     status: "CONSULTING",
+    department_queue_no: 1,
     created_at: makeDate(25),
     tracking: {
       waiting_start: makeDate(24),
@@ -157,7 +162,8 @@ const seedTokens = async () => {
           department: item.department,
           parent_token_id: item.parent_token_id,
           status: item.status,
-          created_at: item.created_at
+          created_at: item.created_at,
+          department_queue_no: item.department_queue_no
         }
       },
       { upsert: true }

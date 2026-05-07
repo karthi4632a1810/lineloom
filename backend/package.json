@@ -8,6 +8,8 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "seed": "node scripts/seed.js",
+    "clear-tokens": "node scripts/clearAllTokens.js",
+    "clear-tokens:confirm": "node scripts/clearAllTokens.js --yes",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

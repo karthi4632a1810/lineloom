@@ -33,6 +33,7 @@ export const LiveQueuePage = () => {
   const [rows, setRows] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [appliedDepartment, setAppliedDepartment] = useState("General Medicine");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState("");
@@ -60,7 +61,7 @@ export const LiveQueuePage = () => {
           ...departmentCatalog.map((department) => String(department?.name ?? "").trim())
         ].filter(Boolean)
       )
-    ],
+    ].sort((a, b) => a.localeCompare(b)),
     [hisDepartments, departmentCatalog]
   );
 
@@ -175,7 +176,10 @@ export const LiveQueuePage = () => {
     setIsLoading(true);
     setError("");
     try {
-      const data = await fetchLiveQueue({ search: appliedSearch });
+      const data = await fetchLiveQueue({
+        search: appliedSearch,
+        department: appliedDepartment
+      });
       setRows(Array.isArray(data) ? data : []);
     } catch (loadError) {
       setError(loadError?.message ?? "Failed to load live queue");
@@ -183,7 +187,7 @@ export const LiveQueuePage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [appliedSearch]);
+  }, [appliedSearch, appliedDepartment]);
 
   useEffect(() => {
     loadQueue();
@@ -310,6 +314,18 @@ export const LiveQueuePage = () => {
           placeholder="Name, phone, reg no, OP/IP visit no, token id…"
           className="live-queue-search"
         />
+        <select
+          name="department_filter"
+          value={appliedDepartment}
+          onChange={(event) => setAppliedDepartment(event.target.value)}
+        >
+          <option value="">All departments</option>
+          {consultDepartmentOptions.map((department) => (
+            <option key={department} value={department}>
+              {department}
+            </option>
+          ))}
+        </select>
         <button type="submit" disabled={isSubmitting}>
           Search
         </button>
@@ -321,8 +337,8 @@ export const LiveQueuePage = () => {
 
       {!isLoading && !error && !rows.length ? (
         <p>
-          {appliedSearch
-            ? "No tokens match your search. Try different keywords."
+          {appliedSearch || appliedDepartment
+            ? "No tokens match your current search/filter."
             : "No active tokens in queue."}
         </p>
       ) : null}
@@ -345,7 +361,7 @@ export const LiveQueuePage = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, queueIndex) => (
+              {rows.map((row) => (
                 <tr
                   key={row.token_id}
                   className="clickable-row"
@@ -370,7 +386,9 @@ export const LiveQueuePage = () => {
                   }}
                 >
                   <td className="col-token-no">
-                    <span className="token-queue-no">#{queueIndex + 1}</span>
+                    <span className="token-queue-no" title={`${row.department} queue number`}>
+                      #{row.department_queue_no ?? "—"}
+                    </span>
                     <span className="token-queue-id" title={row.token_id}>
                       {row.token_id}
                     </span>

@@ -190,6 +190,7 @@ export const getDashboardTokens = async (filters = {}) => {
         token_id: token.token_id,
         patient_id: token.patient_id,
         visit_id: token.visit_id,
+        department_queue_no: token.department_queue_no ?? null,
         name,
         phone,
         department: token.department,
@@ -219,7 +220,8 @@ export const getDashboardTokens = async (filters = {}) => {
         row.patient_id.toLowerCase().includes(search) ||
         row.visit_id.toLowerCase().includes(search) ||
         row.name.toLowerCase().includes(search) ||
-        row.department.toLowerCase().includes(search);
+        row.department.toLowerCase().includes(search) ||
+        (row.department_queue_no != null && String(row.department_queue_no).includes(search));
       const matchesDepartment = !departmentFilter || row.department === departmentFilter;
       return matchesSearch && matchesDepartment;
     });
