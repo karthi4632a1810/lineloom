@@ -7,6 +7,7 @@ import departmentRoutes from "./departmentRoutes.js";
 import journeyRoutes from "./journeyRoutes.js";
 import alertRoutes from "./alertRoutes.js";
 import intelligenceRoutes from "./intelligenceRoutes.js";
+import patientRoutes from "./patientRoutes.js";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use("/departments", departmentRoutes);
 router.use("/journey", journeyRoutes);
 router.use("/alerts", alertRoutes);
 router.use("/intelligence", intelligenceRoutes);
+router.use("/patients", patientRoutes);
 
 export default router;

@@ -8,6 +8,7 @@ import { DepartmentAnalyticsPage } from "./pages/DepartmentAnalyticsPage";
 import { AlertsPage } from "./pages/AlertsPage";
 import { CompletedQueuePage } from "./pages/CompletedQueuePage";
 import { LiveQueuePage } from "./pages/LiveQueuePage";
+import { PatientRecordsPage } from "./pages/PatientRecordsPage";
 import { TokenCreationPage } from "./pages/TokenCreationPage";
 import { TokenDetailPage } from "./pages/TokenDetailPage";
 
@@ -146,7 +147,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppLayout>
-                <PlaceholderPage title="Patient Records" />
+                <PatientRecordsPage />
               </AppLayout>
             </ProtectedRoute>
           }

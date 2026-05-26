@@ -242,11 +242,6 @@ const chooseLookupTable = (tableMap = {}, idCandidates = [], nameCandidates = []
   return best;
 };
 
-export const __testables = {
-  chooseLookupTable,
-  buildTableMapFromInfoSchemaRows
-};
-
 const getLookupMeta = async () => {
   const now = Date.now();
   if (cachedLookupMeta !== null && now - lastLookupMetaAt < LOOKUP_TTL_MS) {
@@ -309,6 +304,44 @@ const getLookupMeta = async () => {
     lastLookupMetaAt = now;
   }
   return cachedLookupMeta;
+};
+
+const formatDateOnly = (value = null) => {
+  if (value == null || value === "") {
+    return "";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString().slice(0, 10);
+};
+
+const formatDateTimeValue = (value = null) => {
+  if (value == null || value === "") {
+    return "";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString().slice(0, 19).replace("T", " ");
+};
+
+const normalizePatientId = (value = "") => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+  const normalized = trimmed.replace(/^0+/, "");
+  return normalized || "0";
+};
+
+const buildPatientIdVariants = (value = "") =>
+  [...new Set([String(value ?? "").trim(), normalizePatientId(value)].filter(Boolean))];
+
+export const __testables = {
+  chooseLookupTable,
+  buildTableMapFromInfoSchemaRows,
+  normalizePatientId,
+  buildPatientIdVariants
 };
 
 export const fetchHisPatients = async () => {
@@ -387,21 +420,29 @@ export const fetchHisPatients = async () => {
  * Create Token search: optional name, IP/OP reg no, admission date range (ANDed).
  * Returns the same row shape as before.
  *
- * @param {{ name?: string, reg_no?: string, date_from?: string, date_to?: string }} filters
+ * @param {{ patient_id?: string, name?: string, reg_no?: string, date_from?: string, date_to?: string }} filters
  */
 export const searchHisPatients = async (filters = {}) => {
   if (!env.hisEnabled) {
     return [];
   }
+  const patientId = String(filters.patient_id ?? "").trim();
+  const patientIdVariants = buildPatientIdVariants(patientId);
   const name = String(filters.name ?? "").trim();
   const regNo = String(filters.reg_no ?? "").trim();
   const dateFrom = String(filters.date_from ?? "").trim();
   const dateTo = String(filters.date_to ?? "").trim();
 
-  if (!name && !regNo && !dateFrom && !dateTo) {
+  if (!patientId && !name && !regNo && !dateFrom && !dateTo) {
     return [];
   }
-  const cacheKey = `his:search:${JSON.stringify({ name, regNo, dateFrom, dateTo })}`;
+  const cacheKey = `his:search:${JSON.stringify({
+    patientIdVariants,
+    name,
+    regNo,
+    dateFrom,
+    dateTo
+  })}`;
   const cached = getCache(cacheKey);
   if (cached) {
     return cached;
@@ -421,6 +462,18 @@ export const searchHisPatients = async (filters = {}) => {
   const opConds = [];
   const ipConds = [];
 
+  if (patientId) {
+    const opIdentifierClauses = patientIdVariants.map(
+      (_variant, index) =>
+        `(CAST(pm.iPat_id AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%' OR CAST(op.iOP_Reg_No AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%' OR CAST(pm.iReg_No AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%')`
+    );
+    const ipIdentifierClauses = patientIdVariants.map(
+      (_variant, index) =>
+        `(CAST(pm.iPat_id AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%' OR CAST(ip.iIP_Reg_No AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%' OR CAST(pm.iReg_No AS VARCHAR(100)) LIKE '%' + @patientId${index} + '%')`
+    );
+    opConds.push(`(${opIdentifierClauses.join(" OR ")})`);
+    ipConds.push(`(${ipIdentifierClauses.join(" OR ")})`);
+  }
   if (name) {
     opConds.push("pm.cPat_Name LIKE '%' + @name + '%'");
     ipConds.push("pm.cPat_Name LIKE '%' + @name + '%'");
@@ -518,6 +571,9 @@ export const searchHisPatients = async (filters = {}) => {
   `;
 
   const bindParams = (request) => {
+    patientIdVariants.forEach((variant, index) => {
+      request.input(`patientId${index}`, sql.VarChar(100), variant);
+    });
     if (name) {
       request.input("name", sql.NVarChar(500), name);
     }
@@ -534,20 +590,6 @@ export const searchHisPatients = async (filters = {}) => {
 
   try {
     const rows = await executeHisQueryWithRetry(query, 12000, bindParams);
-    const fmtDate = (v) => {
-      if (v == null || v === "") {
-        return "";
-      }
-      const d = v instanceof Date ? v : new Date(v);
-      return Number.isNaN(d.getTime()) ? String(v) : d.toISOString().slice(0, 10);
-    };
-    const fmtDateTime = (v) => {
-      if (v == null || v === "") {
-        return "";
-      }
-      const d = v instanceof Date ? v : new Date(v);
-      return Number.isNaN(d.getTime()) ? String(v) : d.toISOString().slice(0, 19).replace("T", " ");
-    };
     const mapped = rows.map((item) => {
       const type = item?.type === "IP" ? "IP" : "OP";
       const dept = String(item?.dept_id ?? "");
@@ -559,13 +601,13 @@ export const searchHisPatients = async (filters = {}) => {
         reg_no: String(item?.visit_id ?? ""),
         i_reg_no: String(item?.i_reg_no ?? ""),
         c_pat_name: name,
-        d_dob: fmtDate(item?.d_dob),
+        d_dob: formatDateOnly(item?.d_dob),
         c_sex: String(item?.c_sex ?? "").trim(),
         i_user_id: String(item?.i_user_id ?? ""),
         i_user_name: String(item?.i_user_name ?? "").trim(),
         dept_id: dept,
         dept_name: String(item?.dept_name ?? "").trim(),
-        admission: fmtDateTime(item?.admission),
+        admission: formatDateTimeValue(item?.admission),
         ip_active:
           type === "IP" && item?.ip_active != null && item?.ip_active !== ""
             ? String(item.ip_active)
@@ -628,6 +670,146 @@ export const fetchHisDepartments = async () => {
       message: error?.message ?? "Unknown SQL error"
     });
     throw new ApiError("Unable to fetch departments from HIS", 503);
+  }
+};
+
+export const fetchPatientVisitHistory = async (patientId = "") => {
+  if (!env.hisEnabled) {
+    return [];
+  }
+  const id = String(patientId ?? "").trim();
+  const patientIdVariants = buildPatientIdVariants(id);
+  if (!id) {
+    return [];
+  }
+  const cacheKey = `his:patient-history:${patientIdVariants.join(",")}`;
+  const cached = getCache(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const phoneExpr = await getPatientPhoneExpression();
+  const lookupMeta = await getLookupMeta();
+  const deptNameFromOpExpr = lookupMeta?.dept
+    ? `(SELECT TOP 1 CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.dept.table} lu WHERE CAST(lu.${lookupMeta.dept.idCol} AS VARCHAR(100)) = CAST(op.iDept_id AS VARCHAR(100)))`
+    : "CAST(NULL AS VARCHAR(200))";
+  const deptNameFromIpExpr = lookupMeta?.dept
+    ? `(SELECT TOP 1 CAST(lu.${lookupMeta.dept.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.dept.table} lu WHERE CAST(lu.${lookupMeta.dept.idCol} AS VARCHAR(100)) = CAST(ip.iDept_id AS VARCHAR(100)))`
+    : "CAST(NULL AS VARCHAR(200))";
+  const userNameExpr = lookupMeta?.user
+    ? `(SELECT TOP 1 CAST(uu.${lookupMeta.user.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.user.table} uu WHERE CAST(uu.${lookupMeta.user.idCol} AS VARCHAR(100)) = CAST(pm.iUser_id AS VARCHAR(100)))`
+    : "CAST(NULL AS VARCHAR(200))";
+  const patientWhere = patientIdVariants
+    .map((_variant, index) => `CAST(pm.iPat_id AS VARCHAR(100)) = @patientId${index}`)
+    .join(" OR ");
+
+  const query = `
+    WITH Combined AS (
+      SELECT
+        CAST(pm.iPat_id AS VARCHAR(100)) AS patient_id,
+        CAST(op.iOP_Reg_No AS VARCHAR(100)) AS visit_id,
+        CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
+        CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
+        ${phoneExpr} AS phone,
+        pm.dDob AS d_dob,
+        CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
+        CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
+        ${userNameExpr} AS i_user_name,
+        CAST(op.iDept_id AS VARCHAR(100)) AS dept_id,
+        ${deptNameFromOpExpr} AS dept_name,
+        op.dOP_dt AS admission,
+        CAST(NULL AS VARCHAR(50)) AS ip_active,
+        'OP' AS type,
+        op.dOP_dt AS visit_datetime
+      FROM [dbo].[Mast_OP_Admission] op
+      INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
+      WHERE ${patientWhere}
+
+      UNION ALL
+
+      SELECT
+        CAST(pm.iPat_id AS VARCHAR(100)) AS patient_id,
+        CAST(ip.iIP_Reg_No AS VARCHAR(100)) AS visit_id,
+        CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
+        CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
+        ${phoneExpr} AS phone,
+        pm.dDob AS d_dob,
+        CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
+        CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
+        ${userNameExpr} AS i_user_name,
+        CAST(ip.iDept_id AS VARCHAR(100)) AS dept_id,
+        ${deptNameFromIpExpr} AS dept_name,
+        ip.dIP_dt AS admission,
+        CAST(ip.bStatus AS VARCHAR(50)) AS ip_active,
+        'IP' AS type,
+        ip.dIP_dt AS visit_datetime
+      FROM [dbo].[Mast_IP_Admission] ip
+      INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
+      WHERE ${patientWhere}
+    )
+    SELECT
+      patient_id,
+      visit_id,
+      i_reg_no,
+      c_pat_name,
+      phone,
+      d_dob,
+      c_sex,
+      i_user_id,
+      i_user_name,
+      dept_id,
+      dept_name,
+      admission,
+      ip_active,
+      type,
+      visit_datetime
+    FROM Combined
+    ORDER BY visit_datetime DESC, visit_id DESC;
+  `;
+
+  try {
+    const rows = await executeHisQueryWithRetry(query, 12000, (request) => {
+      patientIdVariants.forEach((variant, index) => {
+        request.input(`patientId${index}`, sql.VarChar(100), variant);
+      });
+    });
+    const mapped = rows.map((item) => {
+      const type = item?.type === "IP" ? "IP" : "OP";
+      const dept = String(item?.dept_id ?? "").trim();
+      return {
+        patient_id: String(item?.patient_id ?? "").trim(),
+        visit_id: String(item?.visit_id ?? "").trim(),
+        reg_no: String(item?.visit_id ?? "").trim(),
+        i_reg_no: String(item?.i_reg_no ?? "").trim(),
+        c_pat_name: String(item?.c_pat_name ?? "").trim(),
+        phone: String(item?.phone ?? "").trim(),
+        d_dob: formatDateOnly(item?.d_dob),
+        c_sex: String(item?.c_sex ?? "").trim(),
+        i_user_id: String(item?.i_user_id ?? "").trim(),
+        i_user_name: String(item?.i_user_name ?? "").trim(),
+        dept_id: dept,
+        dept_name: String(item?.dept_name ?? "").trim(),
+        department: String(item?.dept_name ?? "").trim() || dept || "General",
+        admission: formatDateTimeValue(item?.admission),
+        ip_active:
+          type === "IP" && item?.ip_active != null && item?.ip_active !== ""
+            ? String(item.ip_active).trim()
+            : "",
+        type,
+        visit_datetime: formatDateTimeValue(item?.visit_datetime)
+      };
+    });
+    setCache(cacheKey, mapped, CACHE_TTL.HIS_SEARCH);
+    return mapped;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    logger.error("HIS patient visit history fetch failed", {
+      patientId: id,
+      message: error?.message ?? "Unknown SQL error"
+    });
+    throw new ApiError("Unable to fetch patient visit history", 503);
   }
 };
 

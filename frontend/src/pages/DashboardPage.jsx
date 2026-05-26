@@ -352,6 +352,60 @@ export const DashboardPage = () => {
         </div>
       ) : null}
 
+      {!isLoading && !error ? (
+        <div
+          className={`action-legend card${intelligenceBrief?.stats ? " action-legend--below-insight" : ""}`}
+          role="note"
+          aria-label="Actions column abbreviations"
+        >
+          <p className="action-legend-heading">Action shortcuts</p>
+          <p className="action-legend-body">
+            <span className="action-legend-item">
+              <abbr className="action-legend-key" title="Start Consulting">
+                SC
+              </abbr>
+              <span className="action-legend-label">Start Consulting</span>
+            </span>
+            <span className="action-legend-sep" aria-hidden>
+              ·
+            </span>
+            <span className="action-legend-item">
+              <abbr className="action-legend-key" title="End Consulting">
+                EC
+              </abbr>
+              <span className="action-legend-label">End Consulting</span>
+            </span>
+            <span className="action-legend-sep" aria-hidden>
+              ·
+            </span>
+            <span className="action-legend-item">
+              <abbr className="action-legend-key" title="Start Treatment">
+                ST
+              </abbr>
+              <span className="action-legend-label">Start Treatment</span>
+            </span>
+            <span className="action-legend-sep" aria-hidden>
+              ·
+            </span>
+            <span className="action-legend-item">
+              <abbr className="action-legend-key" title="End Treatment">
+                ET
+              </abbr>
+              <span className="action-legend-label">End Treatment</span>
+            </span>
+            <span className="action-legend-sep" aria-hidden>
+              ·
+            </span>
+            <span className="action-legend-item">
+              <span className="action-legend-key action-legend-key--back" title="Revert to an earlier journey step">
+                ←
+              </span>
+              <span className="action-legend-label">Revert to an earlier step</span>
+            </span>
+          </p>
+        </div>
+      ) : null}
+
       {quickAlerts.length ? (
         <div className="alert-strip" role="status">
           {quickAlerts.map((a) => (

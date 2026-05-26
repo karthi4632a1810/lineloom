@@ -1,9 +1,24 @@
 # Patient Waiting Time Tracker (LineLoom)
 
 Full-stack app to track outpatient and inpatient waiting, consultation, care, and break times. It connects to your existing Hospital Information System (SQL Server, read-only) for patient and visit data, and stores queue tokens and timing only in MongoDB.
-
+admin.apdch.edu.in
+admission.apdch.edu.in
+apdch.edu.in
+api.apdch.edu.in
+bio.apdch.edu.in
+careers.apdch.edu.in
+cis.apdch.edu.in
 ---
-
+	PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+	apdch.com	PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+	biometric.apdch.com	PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+		PHP 7.4 [Outdated] (nf-php74)	
+	
 ## How the system works (end-to-end workflow)
 
 This section is the **conceptual map** of LineLoom: what happens from the moment a patient enters the flow through reporting, intelligence, and continuous improvement—not implementation detail.

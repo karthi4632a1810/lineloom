@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { __testables } from "../services/hisService.js";
 
-const { chooseLookupTable, buildTableMapFromInfoSchemaRows } = __testables;
+const { chooseLookupTable, buildTableMapFromInfoSchemaRows, normalizePatientId, buildPatientIdVariants } =
+  __testables;
 
 test("buildTableMapFromInfoSchemaRows groups table columns correctly", () => {
   const rows = [
@@ -67,4 +68,15 @@ test("chooseLookupTable returns null when required columns are absent", () => {
   );
 
   assert.equal(picked, null);
+});
+
+test("normalizePatientId trims leading zeroes for numeric ids", () => {
+  assert.equal(normalizePatientId("0006137906"), "6137906");
+  assert.equal(normalizePatientId("0000"), "0");
+  assert.equal(normalizePatientId("AB0012"), "AB0012");
+});
+
+test("buildPatientIdVariants keeps padded and normalized patient ids", () => {
+  assert.deepEqual(buildPatientIdVariants("0006137906"), ["0006137906", "6137906"]);
+  assert.deepEqual(buildPatientIdVariants("6137906"), ["6137906"]);
 });

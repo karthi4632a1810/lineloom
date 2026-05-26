@@ -9,6 +9,7 @@ export const getHisPatients = asyncHandler(async (_req, res) => {
 
 export const searchPatientsFromHis = asyncHandler(async (req, res) => {
   const patients = await searchHisPatients({
+    patient_id: req?.query?.patient_id,
     name: req?.query?.name,
     reg_no: req?.query?.reg_no,
     date_from: req?.query?.date_from,
