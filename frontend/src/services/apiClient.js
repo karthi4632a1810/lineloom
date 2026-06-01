@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://192.168.101.116:5000";
 const MAX_TIMEOUT_RETRIES = 3;
 const RETRY_DELAY_MS = 300;
 

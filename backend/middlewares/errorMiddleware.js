@@ -13,7 +13,7 @@ export const errorHandler = (error, _req, res, _next) => {
   const clientMessage = isValidationError
     ? "Invalid request payload"
     : statusCode >= 500
-      ? "Something went wrong"
+      ? "Something went wrong" + error
       : error?.message ?? "Request failed";
   logger.error("API error", {
     statusCode,
