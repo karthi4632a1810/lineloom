@@ -1,7 +1,7 @@
-import sql from "mssql";
 import { env } from "./env.js";
+import { createSqlPool, sql } from "./createSqlPool.js";
 
-let poolPromise;
+let hisPoolRef;
 
 const sqlConfig = {
   server: env.hisSql.host,
@@ -21,8 +21,10 @@ const sqlConfig = {
 };
 
 export const getHisPool = async () => {
-  poolPromise ??= sql.connect(sqlConfig);
-  return poolPromise;
+  if (!hisPoolRef) {
+    hisPoolRef = createSqlPool(sqlConfig);
+  }
+  return hisPoolRef.connect();
 };
 
 export { sql };

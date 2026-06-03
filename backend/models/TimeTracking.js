@@ -31,7 +31,14 @@ const timeTrackingSchema = new mongoose.Schema(
     lab_end: { type: Date, default: null },
     lab_logs: [
       {
-        start: { type: Date, required: true },
+        request_at: { type: Date, default: null },
+        sample_received_at: { type: Date, default: null },
+        completed_at: { type: Date, default: null },
+        request_no: { type: String, default: "" },
+        procedure: { type: String, default: "" },
+        dept: { type: String, default: "" },
+        status: { type: String, default: "" },
+        start: { type: Date, default: null },
         end: { type: Date, default: null }
       }
     ],
@@ -41,7 +48,14 @@ const timeTrackingSchema = new mongoose.Schema(
     pharmacy_elapsed_ms: { type: Number, default: 0, min: 0 },
     pharmacy_logs: [
       {
-        start: { type: Date, required: true },
+        request_at: { type: Date, default: null },
+        bill_at: { type: Date, default: null },
+        completed_at: { type: Date, default: null },
+        bill_no: { type: String, default: "" },
+        request_no: { type: String, default: "" },
+        issue_type: { type: String, default: "" },
+        dept: { type: String, default: "" },
+        start: { type: Date, default: null },
         end: { type: Date, default: null }
       }
     ],

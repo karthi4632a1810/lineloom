@@ -5,6 +5,7 @@ import {
   branchToken,
   completeVisitAfterConsult,
   createToken,
+  findExistingActiveToken,
   endConsulting,
   endLabTesting,
   deleteBillingPayment,
@@ -15,6 +16,7 @@ import {
   getTokenDetail,
   moveTokenToWaiting,
   recordBillingPayment,
+  syncBillingFromHis,
   endBillingPhase,
   startBillingPhase,
   startPharmacyPhase,
@@ -33,6 +35,9 @@ import { getTokenJourney } from "../services/journeyService.js";
 const createTokenSchema = z.object({
   patient_id: z.string().min(1),
   visit_id: z.string().min(1),
+  patient_reg_no: z.string().optional(),
+  patient_name: z.string().optional(),
+  patient_phone: z.string().optional(),
   department: z.string().min(1)
 });
 
@@ -75,6 +80,18 @@ export const createTokenHandler = asyncHandler(async (req, res) => {
   return sendSuccess(res, token, "Token created", 201);
 });
 
+export const getExistingTokenHandler = asyncHandler(async (req, res) => {
+  const existing = await findExistingActiveToken({
+    patient_id: req?.query?.patient_id,
+    visit_id: req?.query?.visit_id,
+    department: req?.query?.department
+  });
+  if (!existing) {
+    return sendSuccess(res, null, "No active token for this visit");
+  }
+  return sendSuccess(res, existing, "Token already exists for this visit");
+});
+
 export const startWaiting = asyncHandler(async (req, res) => {
   const result = await moveTokenToWaiting(getTokenId(req));
   return sendSuccess(res, result, "Moved token to waiting");
@@ -112,6 +129,12 @@ export const recordBillingPaymentHandler = asyncHandler(async (req, res) => {
   const input = recordBillingSchema.parse(req.body ?? {});
   const result = await recordBillingPayment(getTokenId(req), input);
   return sendSuccess(res, result, "Payment recorded");
+});
+
+export const syncBillingFromHisHandler = asyncHandler(async (req, res) => {
+  const onDate = String(req?.query?.on_date ?? req?.body?.on_date ?? "").trim();
+  const result = await syncBillingFromHis(getTokenId(req), onDate ? { on_date: onDate } : {});
+  return sendSuccess(res, result, "Billing synced from HIS");
 });
 
 export const updateBillingPaymentHandler = asyncHandler(async (req, res) => {

@@ -11,6 +11,7 @@ import {
 } from "../services/dashboardService";
 import { fetchAlerts } from "../services/alertService";
 import { fetchIntelligenceSummary } from "../services/intelligenceService";
+import { tokenDetailPath } from "../utils/tokenPaths.js";
 import {
   completeVisitAfterConsultRequest,
   endCareRequest,
@@ -505,7 +506,7 @@ export const DashboardPage = () => {
                     if (!cleanId) {
                       return;
                     }
-                    navigate(`/tokens/${cleanId}`);
+                    navigate(tokenDetailPath(cleanId));
                   }}
                   role="button"
                   tabIndex={0}
@@ -516,7 +517,7 @@ export const DashboardPage = () => {
                       if (!cleanId) {
                         return;
                       }
-                      navigate(`/tokens/${cleanId}`);
+                      navigate(tokenDetailPath(cleanId));
                     }
                   }}
                 >

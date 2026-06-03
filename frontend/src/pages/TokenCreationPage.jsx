@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { fetchHisDepartments } from "../services/dashboardService";
 import { searchHisPatients } from "../services/hisService";
-import { createTokenRequest } from "../services/tokenService";
+import { checkExistingTokenRequest, createTokenRequest } from "../services/tokenService";
+import { tokenDetailPath } from "../utils/tokenPaths.js";
 
-const initialForm = { patient_id: "", visit_id: "", department: "" };
+const initialForm = { patient_id: "", visit_id: "", patient_reg_no: "", department: "" };
 
 /** Local calendar date as YYYY-MM-DD for `<input type="date" />`. */
 const getTodayDateInputValue = () => {
@@ -50,6 +51,8 @@ export const TokenCreationPage = () => {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [createdToken, setCreatedToken] = useState(null);
+  const [existingToken, setExistingToken] = useState(null);
+  const [existingCheckLoading, setExistingCheckLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -160,10 +163,45 @@ export const TokenCreationPage = () => {
     setForm({
       patient_id: patient?.patient_id ?? "",
       visit_id: patient?.visit_id ?? "",
+      patient_reg_no: String(patient?.i_reg_no ?? "").trim(),
       department: initialDept
     });
     setCreatedToken(null);
+    setExistingToken(null);
   };
+
+  useEffect(() => {
+    if (!selectedPatient || !form.patient_id || !form.visit_id || !form.department) {
+      setExistingToken(null);
+      setExistingCheckLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setExistingCheckLoading(true);
+    checkExistingTokenRequest({
+      patient_id: form.patient_id,
+      visit_id: form.visit_id,
+      department: form.department
+    })
+      .then((token) => {
+        if (!cancelled) {
+          setExistingToken(token);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExistingToken(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setExistingCheckLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatient, form.patient_id, form.visit_id, form.department]);
 
   const handleChange = (event) => {
     const { name: field, value } = event.target;
@@ -436,8 +474,30 @@ export const TokenCreationPage = () => {
               <p className="muted small token-modal-note">
                 Visit type: {selectedPatient?.type === "IP" ? "Inpatient (IP)" : "Outpatient (OP)"}
               </p>
+              {existingCheckLoading ? (
+                <p className="muted-inline">Checking for an existing token…</p>
+              ) : null}
+              {existingToken ? (
+                <div className="token-existing-warning" role="alert">
+                  <p>
+                    <strong>Token already created</strong> for this visit in {existingToken.department}.
+                  </p>
+                  <p>
+                    {existingToken.department_queue_no != null
+                      ? `#${existingToken.department_queue_no} · `
+                      : ""}
+                    {existingToken.token_id} · {existingToken.status}
+                  </p>
+                  <Link to={tokenDetailPath(existingToken.token_id)} className="token-existing-link">
+                    Open existing token
+                  </Link>
+                </div>
+              ) : null}
               <div className="token-modal-actions">
-                <button type="submit" disabled={isSubmitting}>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || existingCheckLoading || Boolean(existingToken)}
+                >
                   {isSubmitting ? "Creating token..." : "Create Token"}
                 </button>
                 <button type="button" className="btn-secondary" onClick={() => setSelectedPatient(null)}>

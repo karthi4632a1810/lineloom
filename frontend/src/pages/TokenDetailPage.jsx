@@ -6,25 +6,16 @@ import { fetchActiveDepartments } from "../services/departmentService";
 import { fetchHisDepartments } from "../services/dashboardService";
 import {
   completeVisitAfterConsultRequest,
-  deleteBillingPaymentRequest,
   endCareRequest,
   endConsultRequest,
-  endLabRequest,
   fetchTokenDetail,
-  endBillingRequest,
-  endPharmacyRequest,
-  recordBillingPaymentRequest,
-  startBillingRequest,
-  startPharmacyRequest,
-  stopBillingRequest,
-  stopPharmacyRequest,
   startCareRequest,
   startConsultRequest,
-  startLabRequest,
-  updateBillingPaymentRequest,
   revertTokenRequest
 } from "../services/tokenService";
-import { fetchTokenJourney } from "../services/journeyService";
+import { buildJourneyStepsFromTracking, mapJourneyStepForDisplay } from "../utils/journeyTimeline.js";
+import { resolveLabTimes } from "../utils/labTimes";
+import { resolvePharmacyTimes } from "../utils/pharmacyTimes";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
 import { postConsultLabel } from "../constants/postConsultOptions";
 import { canRevertVisit, getVisitPhaseChipClass, getVisitPhaseLabel } from "../utils/revertAnchors";
@@ -134,60 +125,6 @@ const getLabeledPaymentTimeline = (payments = [], label = "") =>
     .filter((entry) => entry.paid_at && !Number.isNaN(entry.paid_at.getTime()))
     .sort((a, b) => a.paid_at.getTime() - b.paid_at.getTime());
 
-const mapPaymentsToSessions = (logs = [], payments = [], label = "") => {
-  const entries = Array.isArray(logs) ? logs : [];
-  const filteredPayments = getLabeledPaymentTimeline(payments, label);
-  const mapped = entries.map(() => []);
-  if (!entries.length || !filteredPayments.length) {
-    return mapped;
-  }
-  filteredPayments.forEach((payment) => {
-    const paidMs = payment?.paid_at ? new Date(payment.paid_at).getTime() : NaN;
-    if (Number.isNaN(paidMs)) {
-      return;
-    }
-    let targetIndex = -1;
-    entries.forEach((entry, idx) => {
-      const startMs = entry?.start ? new Date(entry.start).getTime() : NaN;
-      if (!Number.isNaN(startMs) && startMs <= paidMs) {
-        targetIndex = idx;
-      }
-    });
-    if (targetIndex >= 0) {
-      mapped[targetIndex].push(payment);
-    }
-  });
-  return mapped;
-};
-
-const getSessionStartForPayment = (logs = [], paidAt = null) => {
-  if (!paidAt) {
-    return null;
-  }
-  const paidMs = new Date(paidAt).getTime();
-  if (Number.isNaN(paidMs)) {
-    return null;
-  }
-  const entries = (Array.isArray(logs) ? logs : [])
-    .map((entry) => ({
-      start: entry?.start ? new Date(entry.start) : null
-    }))
-    .filter((entry) => entry.start && !Number.isNaN(entry.start.getTime()))
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
-  if (!entries.length) {
-    return null;
-  }
-  let selected = entries[0].start;
-  for (const entry of entries) {
-    if (entry.start.getTime() <= paidMs) {
-      selected = entry.start;
-    } else {
-      break;
-    }
-  }
-  return selected;
-};
-
 const getLogBounds = (logs = [], fallbackStart = null, fallbackEnd = null) => {
   const entries = Array.isArray(logs) ? logs : [];
   if (!entries.length) {
@@ -257,24 +194,27 @@ const getDetailTatSeconds = (tracking = {}, status = "WAITING", metrics = {}, ke
     if (!tracking.consult_end || !inLabPath) {
       return null;
     }
+    const { sampleAt, requestAt } = resolveLabTimes(tracking);
+    const labWorkStart = sampleAt ?? requestAt ?? (tracking.lab_start ? new Date(tracking.lab_start) : null);
     return (
       toSecondsFromRange(
         tracking.consult_end,
-        tracking.lab_start ?? (status === "CONSULTING" && !tracking.lab_start ? null : tracking.lab_start),
+        labWorkStart ?? (status === "CONSULTING" && !labWorkStart ? null : labWorkStart),
         nowMs
       ) ?? toSecondsFromMinutes(metrics.lab_wait_time_minutes)
     );
   }
   if (key === "lab_test") {
-    if (!tracking.lab_start) {
+    const { sampleAt, completedAt } = resolveLabTimes(tracking);
+    const labTestStart = sampleAt ?? tracking.lab_start;
+    if (!labTestStart) {
       return null;
     }
+    const labTestEnd =
+      completedAt ?? tracking.lab_end ?? (status === "CONSULTING" && !tracking.lab_end ? null : tracking.lab_end);
     return (
-      toSecondsFromRange(
-        tracking.lab_start,
-        tracking.lab_end ?? (status === "CONSULTING" && !tracking.lab_end ? null : tracking.lab_end),
-        nowMs
-      ) ?? toSecondsFromMinutes(metrics.lab_test_time_minutes)
+      toSecondsFromRange(labTestStart, labTestEnd, nowMs) ??
+      toSecondsFromMinutes(metrics.lab_test_time_minutes)
     );
   }
   return null;
@@ -297,61 +237,53 @@ const detailToRevertRow = (token = {}, tracking = {}) => ({
 });
 
 export const TokenDetailPage = () => {
-  const { tokenId } = useParams();
+  const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const resolvedTokenId = useMemo(() => {
-    const fromParam = String(tokenId ?? "").replace(/^\/+|\/+$/g, "");
-    if (fromParam) {
-      return fromParam;
+    const splat = String(params["*"] ?? "").trim();
+    if (splat) {
+      try {
+        return decodeURIComponent(splat.replace(/^\/+|\/+$/g, ""));
+      } catch {
+        return splat.replace(/^\/+|\/+$/g, "");
+      }
     }
-    const parts = String(location?.pathname ?? "")
-      .split("/")
-      .filter(Boolean);
-    const last = parts.length ? String(parts[parts.length - 1]) : "";
-    return last.replace(/^\/+|\/+$/g, "");
-  }, [tokenId, location?.pathname]);
+    const fromParam = String(params.tokenId ?? "").trim();
+    if (fromParam) {
+      try {
+        return decodeURIComponent(fromParam);
+      } catch {
+        return fromParam;
+      }
+    }
+    const match = String(location?.pathname ?? "").match(/^\/tokens\/(.+?)\/?$/i);
+    if (!match) {
+      return "";
+    }
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }, [params, location?.pathname]);
 
   const fetcher = useMemo(() => () => fetchTokenDetail(resolvedTokenId), [resolvedTokenId]);
-  const { data, isLoading, error, reload } = useAsyncData(fetcher, [fetcher]);
-
-  const journeyFetcher = useMemo(
-    () => () => {
-      if (!resolvedTokenId) {
-        return Promise.resolve(null);
-      }
-      return fetchTokenJourney(resolvedTokenId);
-    },
-    [resolvedTokenId]
-  );
-  const {
-    data: journeyPayload,
-    isLoading: journeyLoading,
-    error: journeyError,
-    reload: reloadJourney
-  } = useAsyncData(journeyFetcher, [journeyFetcher]);
+  const { data, isLoading, error, reload, silentReload } = useAsyncData(fetcher, [fetcher]);
 
   const refreshTokenViews = useCallback(async () => {
     await reload();
-    await reloadJourney();
-  }, [reload, reloadJourney]);
+  }, [reload]);
 
   const [actionError, setActionError] = useState("");
   const [isActing, setIsActing] = useState(false);
   const [departmentCatalog, setDepartmentCatalog] = useState([]);
   const [hisDepartments, setHisDepartments] = useState([]);
   const [consultDept, setConsultDept] = useState("");
-  const [billingAmountInput, setBillingAmountInput] = useState("");
-  const [billingNoteInput, setBillingNoteInput] = useState("");
-  const [billingLabelInput, setBillingLabelInput] = useState("");
-  const [showPharmacyBillingModal, setShowPharmacyBillingModal] = useState(false);
-  const [pharmacyBillingAmountInput, setPharmacyBillingAmountInput] = useState("");
-  const [pharmacyBillingNoteInput, setPharmacyBillingNoteInput] = useState("");
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [showEndConsultConfirm, setShowEndConsultConfirm] = useState(false);
   const [showCompleteVisitConfirm, setShowCompleteVisitConfirm] = useState(false);
   const [stepBackRow, setStepBackRow] = useState(null);
-  const isAdmin = String(localStorage.getItem("auth_role") ?? "").toLowerCase() === "admin";
 
   useEffect(() => {
     fetchActiveDepartments()
@@ -391,6 +323,34 @@ export const TokenDetailPage = () => {
     return () => window.removeEventListener("lineloom-token-refresh", onRefresh);
   }, [resolvedTokenId, refreshTokenViews]);
 
+  useEffect(() => {
+    if (isLoading || !data?.token?.visit_id || data.token.status === "COMPLETED") {
+      return undefined;
+    }
+    const tr = data.tracking ?? {};
+    const payments = Array.isArray(tr.billing_payments) ? tr.billing_payments : [];
+    const hasBilling =
+      payments.length > 0 ||
+      Boolean(tr.billing_end) ||
+      Boolean(tr.billing_start) ||
+      (Number(tr.billing_elapsed_ms ?? 0) || 0) > 0;
+    const { completedAt: labCompletedAt } = resolveLabTimes(tr);
+    const { completedAt: pharmacyCompletedAt } = resolvePharmacyTimes(tr);
+    const inLabPath =
+      Boolean(tr.consult_end) &&
+      (Boolean(tr.labs_ordered) || tr.lab_start || tr.lab_end || (tr.lab_logs ?? []).length > 0);
+    const needsLabRefresh = inLabPath && !labCompletedAt;
+    const needsPharmacyRefresh = Boolean(tr.consult_end) && !pharmacyCompletedAt;
+    if (hasBilling && !needsLabRefresh && !needsPharmacyRefresh) {
+      return undefined;
+    }
+    const pollMs = needsLabRefresh || needsPharmacyRefresh ? 15_000 : 30_000;
+    const interval = window.setInterval(() => {
+      silentReload();
+    }, pollMs);
+    return () => window.clearInterval(interval);
+  }, [isLoading, data, silentReload]);
+
   const queueRowForRevert = useMemo(() => {
     const t = data?.token;
     const tr = data?.tracking ?? {};
@@ -405,7 +365,18 @@ export const TokenDetailPage = () => {
     [queueRowForRevert]
   );
 
-  if (isLoading) {
+  const patientJourneySteps = useMemo(() => {
+    const t = data?.token;
+    const tr = data?.tracking ?? {};
+    if (!t) {
+      return [];
+    }
+    return buildJourneyStepsFromTracking(tr, t).map((seg) =>
+      mapJourneyStepForDisplay(seg, formatDateTime)
+    );
+  }, [data, nowMs]);
+
+  if (isLoading && !data) {
     return <section className="page">Loading token timeline...</section>;
   }
   if (error) {
@@ -461,26 +432,25 @@ export const TokenDetailPage = () => {
     : !tracking.care_end
       ? `${formatSeconds(treatmentSeconds)} elapsed`
       : formatSeconds(treatmentSeconds);
-  const pharmacyTotalSeconds = getWorkflowTotalSeconds(
-    tracking.pharmacy_logs,
-    tracking.pharmacy_start,
-    nowMs
-  );
-  const labTotalSeconds = getWorkflowTotalSeconds(tracking.lab_logs, tracking.lab_start, nowMs);
+  const pharmacyHisTimes = resolvePharmacyTimes(tracking);
+  const pharmacyLogs = Array.isArray(tracking.pharmacy_logs) ? tracking.pharmacy_logs : [];
+  const pharmacyTotalSeconds =
+    pharmacyHisTimes.billAt && pharmacyHisTimes.completedAt
+      ? toSecondsFromRange(pharmacyHisTimes.billAt, pharmacyHisTimes.completedAt, nowMs)
+      : pharmacyHisTimes.billAt
+        ? toSecondsFromRange(pharmacyHisTimes.billAt, null, nowMs)
+        : getWorkflowTotalSeconds(tracking.pharmacy_logs, tracking.pharmacy_start, nowMs);
   const treatmentTotalSeconds = getWorkflowTotalSeconds(
     tracking.treatment_logs,
     tracking.care_start,
     nowMs
   );
-  const pharmacyCurrentStartDisplay = getDisplayCurrentStart(
-    tracking.pharmacy_start,
-    tracking.pharmacy_logs
-  );
-  const labCurrentStartDisplay = getDisplayCurrentStart(tracking.lab_start, tracking.lab_logs);
   const treatmentCurrentStartDisplay = getDisplayCurrentStart(
     tracking.care_start,
     tracking.treatment_logs
   );
+  const labHisTimes = resolveLabTimes(tracking);
+  const labLogs = Array.isArray(tracking.lab_logs) ? tracking.lab_logs : [];
   const labBounds = getLogBounds(tracking.lab_logs, tracking.lab_start, tracking.lab_end);
   const treatmentBounds = getLogBounds(
     tracking.treatment_logs,
@@ -507,9 +477,6 @@ export const TokenDetailPage = () => {
       : formatSeconds(labTestSeconds);
 
   const billingPayments = Array.isArray(tracking.billing_payments) ? tracking.billing_payments : [];
-  const billingPaidAmount =
-    Number(tracking.billing_paid_amount ?? 0) ||
-    billingPayments.reduce((sum, item) => sum + (Number(item?.amount ?? 0) || 0), 0);
   const hasBillingStats =
     billingSeconds != null ||
     Boolean(tracking.billing_start) ||
@@ -524,101 +491,15 @@ export const TokenDetailPage = () => {
   const postConsultPlansSaved = Array.isArray(tracking.post_consult_plans)
     ? tracking.post_consult_plans
     : [];
-  const labPaidAt = getLatestLabelPaymentAt(billingPayments, "lab");
   const treatmentPaidAt = getLatestLabelPaymentAt(billingPayments, "treatment");
-  const labBilledSeconds =
-    labCurrentStartDisplay && labPaidAt
-      ? toSecondsFromRange(labCurrentStartDisplay, labPaidAt, nowMs)
-      : null;
   const treatmentBilledSeconds =
     treatmentCurrentStartDisplay && treatmentPaidAt
       ? toSecondsFromRange(treatmentCurrentStartDisplay, treatmentPaidAt, nowMs)
       : null;
-  const pharmacyLabelPayments = getLabeledPaymentTimeline(billingPayments, "pharmacy");
-  const labLabelPayments = getLabeledPaymentTimeline(billingPayments, "lab");
   const treatmentLabelPayments = getLabeledPaymentTimeline(billingPayments, "treatment");
-  const pharmacyPaymentsBySession = mapPaymentsToSessions(
-    tracking.pharmacy_logs,
-    billingPayments,
-    "pharmacy"
-  );
-  const labPaymentsBySession = mapPaymentsToSessions(tracking.lab_logs, billingPayments, "lab");
-  const treatmentPaymentsBySession = mapPaymentsToSessions(
-    tracking.treatment_logs,
-    billingPayments,
-    "treatment"
-  );
-  const overallWorkflowStart = [
-    getDisplayCurrentStart(tracking.pharmacy_start, tracking.pharmacy_logs),
-    getDisplayCurrentStart(tracking.lab_start, tracking.lab_logs),
-    getDisplayCurrentStart(tracking.care_start, tracking.treatment_logs)
-  ]
-    .filter(Boolean)
-    .map((value) => new Date(value))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
-
   const visitPhaseRow = detailToRevertRow(token, tracking);
   const visitPhaseLabel = getVisitPhaseLabel(visitPhaseRow);
   const visitPhaseChipClass = getVisitPhaseChipClass(visitPhaseRow);
-
-  const timeline = [
-    { label: "Admission", time: formatDateTime(token.created_at), done: true },
-    {
-      label: "Waiting Pool",
-      time: tracking.waiting_start ? formatDateTime(tracking.waiting_start) : "--",
-      done: Boolean(tracking.waiting_start)
-    },
-    {
-      label: "Consulting",
-      time: tracking.consult_start ? formatDateTime(tracking.consult_start) : "--",
-      done: Boolean(tracking.consult_start),
-      active: token.status === "CONSULTING" && !tracking.consult_end
-    },
-    ...(tracking.consult_end && inLabPath
-      ? [
-          {
-            label: "Lab waiting",
-            time: formatDateTime(tracking.consult_end),
-            done: Boolean(tracking.lab_start),
-            active: token.status === "CONSULTING" && !tracking.lab_start
-          },
-          {
-            label: "Lab testing",
-            time: tracking.lab_start ? formatDateTime(tracking.lab_start) : "--",
-            done: Boolean(tracking.lab_end),
-            active: token.status === "CONSULTING" && Boolean(tracking.lab_start) && !tracking.lab_end
-          }
-        ]
-      : []),
-    {
-      label: "Treatment",
-      time: tracking.care_start ? formatDateTime(tracking.care_start) : "--",
-      done: Boolean(tracking.care_start),
-      active: token.status === "IN_TREATMENT"
-    },
-    {
-      label: "Completed / Discharge",
-      time: tracking.care_end ? formatDateTime(tracking.care_end) : "--",
-      done: token.status === "COMPLETED"
-    }
-  ];
-
-  const journeyFromApi =
-    journeyPayload?.timeline?.length && !journeyError
-      ? journeyPayload.timeline.map((seg) => ({
-          kind: String(seg.kind ?? "").toLowerCase(),
-          label: seg.label,
-          timePrimary: seg.in_progress
-            ? "In progress"
-            : seg.duration_minutes != null
-              ? `${seg.duration_minutes} min`
-              : "--",
-          timeSecondary: `${formatDateTime(seg.start)}${seg.end ? ` → ${formatDateTime(seg.end)}` : ""}`,
-          done: Boolean(seg.end) && !seg.in_progress,
-          active: Boolean(seg.in_progress)
-        }))
-      : null;
 
   const runTokenAction = async (action = "start_consult") => {
     const id = String(token?.token_id ?? resolvedTokenId ?? "");
@@ -642,47 +523,14 @@ export const TokenDetailPage = () => {
     }
     setActionError("");
     setIsActing(true);
-    let openPharmacyBillingPrompt = false;
     try {
       if (action === "start_treatment") {
         await startCareRequest(id);
       } else if (action === "end_treatment") {
         await endCareRequest(id);
-      } else if (action === "start_billing") {
-        await startBillingRequest(id);
-      } else if (action === "stop_billing") {
-        await stopBillingRequest(id);
-      } else if (action === "end_billing") {
-        await endBillingRequest(id);
-      } else if (action === "start_pharmacy") {
-        await startPharmacyRequest(id);
-      } else if (action === "stop_pharmacy") {
-        await stopPharmacyRequest(id);
-      } else if (action === "end_pharmacy") {
-        await endPharmacyRequest(id);
-        openPharmacyBillingPrompt = true;
-      } else if (action === "record_payment") {
-        const amount = Number(billingAmountInput);
-        await recordBillingPaymentRequest(id, {
-          amount: Number.isFinite(amount) ? amount : billingAmountInput,
-          note: billingNoteInput,
-          billing_label: billingLabelInput || undefined
-        });
-        setBillingAmountInput("");
-        setBillingNoteInput("");
-        setBillingLabelInput("");
-      } else if (action === "start_lab") {
-        await startLabRequest(id);
-      } else if (action === "end_lab") {
-        await endLabRequest(id);
       }
       await refreshTokenViews();
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
-      if (openPharmacyBillingPrompt) {
-        setPharmacyBillingAmountInput("");
-        setPharmacyBillingNoteInput("");
-        setShowPharmacyBillingModal(true);
-      }
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to update token state");
     } finally {
@@ -723,108 +571,6 @@ export const TokenDetailPage = () => {
       window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
     } catch (requestError) {
       setActionError(requestError?.message ?? "Unable to complete visit");
-    } finally {
-      setIsActing(false);
-    }
-  };
-
-  const submitPharmacyBillingPayment = async () => {
-    const id = String(token?.token_id ?? resolvedTokenId ?? "");
-    if (!id) {
-      return;
-    }
-    const amount = Number(pharmacyBillingAmountInput);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setActionError("Enter a valid pharmacy billing amount.");
-      return;
-    }
-    setActionError("");
-    setIsActing(true);
-    try {
-      if (!tracking.billing_start || tracking.billing_end) {
-        await startBillingRequest(id);
-      }
-      await recordBillingPaymentRequest(id, {
-        amount,
-        note: pharmacyBillingNoteInput,
-        billing_label: "pharmacy"
-      });
-      setShowPharmacyBillingModal(false);
-      setPharmacyBillingAmountInput("");
-      setPharmacyBillingNoteInput("");
-      await refreshTokenViews();
-      window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
-    } catch (requestError) {
-      setActionError(requestError?.message ?? "Unable to add pharmacy billing payment");
-    } finally {
-      setIsActing(false);
-    }
-  };
-
-  const editBillingPayment = async (payment = null) => {
-    if (!isAdmin || !payment?._id) {
-      return;
-    }
-    const amountInput = window.prompt("Edit payment amount", String(payment?.amount ?? ""));
-    if (amountInput == null) {
-      return;
-    }
-    const amount = Number(amountInput);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setActionError("Enter a valid payment amount.");
-      return;
-    }
-    const noteInput = window.prompt("Edit payment note (optional)", String(payment?.note ?? ""));
-    if (noteInput == null) {
-      return;
-    }
-    const labelInput = window.prompt(
-      "Edit label (lab/pharmacy/treatment or empty)",
-      String(payment?.label ?? "")
-    );
-    if (labelInput == null) {
-      return;
-    }
-    const id = String(token?.token_id ?? resolvedTokenId ?? "");
-    if (!id) {
-      return;
-    }
-    setActionError("");
-    setIsActing(true);
-    try {
-      await updateBillingPaymentRequest(id, payment._id, {
-        amount,
-        note: noteInput,
-        billing_label: String(labelInput).trim().toLowerCase()
-      });
-      await refreshTokenViews();
-      window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
-    } catch (requestError) {
-      setActionError(requestError?.message ?? "Unable to update payment");
-    } finally {
-      setIsActing(false);
-    }
-  };
-
-  const removeBillingPayment = async (payment = null) => {
-    if (!isAdmin || !payment?._id) {
-      return;
-    }
-    if (!window.confirm("Delete this payment?")) {
-      return;
-    }
-    const id = String(token?.token_id ?? resolvedTokenId ?? "");
-    if (!id) {
-      return;
-    }
-    setActionError("");
-    setIsActing(true);
-    try {
-      await deleteBillingPaymentRequest(id, payment._id);
-      await refreshTokenViews();
-      window.dispatchEvent(new CustomEvent("lineloom-token-refresh", { detail: { tokenId: id } }));
-    } catch (requestError) {
-      setActionError(requestError?.message ?? "Unable to delete payment");
     } finally {
       setIsActing(false);
     }
@@ -890,7 +636,10 @@ export const TokenDetailPage = () => {
               <span className="patient-chip">{token.patient_id}</span>
             </div>
             <p className="patient-meta">
-              {token.department} • Queue #{token.department_queue_no ?? "—"} • Visit {token.visit_id}
+              {token.department} • Queue #{token.department_queue_no ?? "—"} • OP {token.visit_id}
+              {token.patient_reg_no && token.patient_reg_no !== token.visit_id
+                ? ` • Patient reg ${token.patient_reg_no}`
+                : ""}
             </p>
             <div className="patient-tags">
               <span className={`status-chip ${visitPhaseChipClass}`} title={`API status: ${token.status}`}>
@@ -1043,52 +792,6 @@ export const TokenDetailPage = () => {
         </section>
       ) : null}
 
-      {showPharmacyBillingModal ? (
-        <section className="modal-overlay">
-          <article className="modal-card consult-modal">
-            <div className="consult-modal-header">
-              <h3>Pharmacy billing amount</h3>
-            </div>
-            <div className="consult-modal-form">
-              <p className="confirm-text">
-                Pharmacy ended. Add billing amount now?
-              </p>
-              <label htmlFor="pharmacy_billing_amount">Amount</label>
-              <input
-                id="pharmacy_billing_amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={pharmacyBillingAmountInput}
-                onChange={(event) => setPharmacyBillingAmountInput(event.target.value)}
-                placeholder="e.g. 150"
-              />
-              <label htmlFor="pharmacy_billing_note">Note (optional)</label>
-              <input
-                id="pharmacy_billing_note"
-                type="text"
-                value={pharmacyBillingNoteInput}
-                onChange={(event) => setPharmacyBillingNoteInput(event.target.value)}
-                placeholder="Medicine bill / payment note"
-              />
-              <div className="consult-modal-actions">
-                <button type="button" onClick={submitPharmacyBillingPayment} disabled={isActing}>
-                  {isActing ? "Saving…" : "Save payment"}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowPharmacyBillingModal(false)}
-                  disabled={isActing}
-                >
-                  Skip for now
-                </button>
-              </div>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
       <RevertConfirmModal
         row={stepBackRow}
         onClose={() => setStepBackRow(null)}
@@ -1147,72 +850,59 @@ export const TokenDetailPage = () => {
             <div className="workflow-slot-grid">
               <div className="workflow-slot-card">
                 <div className="workflow-slot-head">
-                  <p className="workflow-slot-title">Pharmacy</p>
+                  <p className="workflow-slot-title">Pharmacy (HIS)</p>
                   <span className="workflow-slot-chip">
                     Elapsed: {formatSeconds(pharmacyTotalSeconds)}
                   </span>
                 </div>
-                <p className="workflow-slot-time">
-                  Start: {formatDateTime(pharmacyCurrentStartDisplay)}
+                <p className="workflow-slot-time muted-inline">
+                  Auto from KMCH_Pharmacy ·{" "}
+                  {token.patient_reg_no && token.patient_reg_no !== token.visit_id
+                    ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
+                    : `OP reg ${token.visit_id || "—"}`}
                 </p>
                 <p className="workflow-slot-time">
-                  End: {formatDateTime(tracking.pharmacy_end)}
+                  Request: {formatDateTime(pharmacyHisTimes.requestAt)}
                 </p>
-                <div className="workflow-slot-actions">
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("start_pharmacy")}
-                    disabled={
-                      isActing ||
-                      token.status !== "CONSULTING" ||
-                      !tracking.consult_end ||
-                      Boolean(tracking.pharmacy_start)
-                    }
-                  >
-                    Start
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("end_pharmacy")}
-                    disabled={
-                      isActing ||
-                      !tracking.pharmacy_start
-                    }
-                  >
-                    End
-                  </button>
-                </div>
+                <p className="workflow-slot-time">
+                  Bill: {formatDateTime(pharmacyHisTimes.billAt)}
+                </p>
+                <p className="workflow-slot-time">
+                  Completed:{" "}
+                  {pharmacyHisTimes.completedAt
+                    ? formatDateTime(pharmacyHisTimes.completedAt)
+                    : pharmacyHisTimes.billAt || pharmacyHisTimes.requestAt
+                      ? "In progress"
+                      : "--"}
+                </p>
               </div>
               <div className="workflow-slot-card">
                 <div className="workflow-slot-head">
-                  <p className="workflow-slot-title">Lab</p>
+                  <p className="workflow-slot-title">Lab (HIS)</p>
                   <span className="workflow-slot-chip">
-                    Elapsed: {formatSeconds(labTotalSeconds)}
+                    Test: {formatSeconds(labTestSeconds)}
                   </span>
                 </div>
-                <p className="workflow-slot-time">Start: {formatDateTime(tracking.lab_start)}</p>
-                <p className="workflow-slot-time">End: {formatDateTime(tracking.lab_end)}</p>
-                <div className="workflow-slot-actions">
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("start_lab")}
-                    disabled={
-                      isActing ||
-                      token.status !== "CONSULTING" ||
-                      !tracking.consult_end ||
-                      Boolean(tracking.lab_start) && !tracking.lab_end
-                    }
-                  >
-                    Start
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("end_lab")}
-                    disabled={isActing || !tracking.lab_start || Boolean(tracking.lab_end)}
-                  >
-                    End
-                  </button>
-                </div>
+                <p className="workflow-slot-time muted-inline">
+                  Auto from KMCH_Lab ·{" "}
+                  {token.patient_reg_no && token.patient_reg_no !== token.visit_id
+                    ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
+                    : `OP reg ${token.visit_id || "—"}`}
+                </p>
+                <p className="workflow-slot-time">
+                  Request: {formatDateTime(labHisTimes.requestAt)}
+                </p>
+                <p className="workflow-slot-time">
+                  Sample received: {formatDateTime(labHisTimes.sampleAt)}
+                </p>
+                <p className="workflow-slot-time">
+                  Completed:{" "}
+                  {labHisTimes.completedAt
+                    ? formatDateTime(labHisTimes.completedAt)
+                    : labHisTimes.sampleAt || labHisTimes.requestAt
+                      ? "In progress"
+                      : "--"}
+                </p>
               </div>
               <div className="workflow-slot-card">
                 <div className="workflow-slot-head">
@@ -1253,51 +943,37 @@ export const TokenDetailPage = () => {
             <h3>Workflow Time Log</h3>
             <div className="workflow-log-sections">
               <div className="table-card">
-                <h4>Pharmacy Logs</h4>
+                <h4>Pharmacy (HIS)</h4>
                 <table>
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Start time</th>
-                      <th>End time</th>
-                      <th>Payment time</th>
-                      <th>Payments</th>
+                      <th>Bill</th>
+                      <th>Request time</th>
+                      <th>Bill time</th>
+                      <th>Completed</th>
+                      <th>Issue</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(Array.isArray(tracking.pharmacy_logs) ? tracking.pharmacy_logs : []).length ? (
-                      [...(tracking.pharmacy_logs ?? [])].reverse().map((entry, idx) => {
-                        const chronoIndex = (tracking.pharmacy_logs ?? []).length - 1 - idx;
-                        const billed = pharmacyLabelPayments[chronoIndex]?.paid_at ?? null;
-                        const elapsedEnd = billed ?? tracking.billing_end ?? null;
-                        const billedSeconds = elapsedEnd
-                          ? toSecondsFromRange(entry?.start, elapsedEnd, nowMs)
-                          : null;
-                        return (
-                          <tr key={`pharmacy-time-log-${idx}`}>
-                            <td>{idx + 1}</td>
-                            <td>{formatDateTime(entry?.start)}</td>
-                            <td>{formatDateTime(entry?.end)}</td>
-                            <td>{formatDateTime(elapsedEnd)}</td>
-                            <td>
-                              {pharmacyPaymentsBySession[chronoIndex]?.length ? (
-                                <div className="session-payments-list">
-                                  {pharmacyPaymentsBySession[chronoIndex].map((p, pIdx) => (
-                                    <span key={`ph-pay-${idx}-${pIdx}`}>
-                                      {Number(p?.amount ?? 0)} @ {formatDateTime(p?.paid_at)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                "--"
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
+                    {pharmacyLogs.length ? (
+                      [...pharmacyLogs].reverse().map((entry, idx) => (
+                        <tr key={`pharmacy-time-log-${idx}-${entry?.bill_no ?? ""}`}>
+                          <td>{idx + 1}</td>
+                          <td>{String(entry?.bill_no ?? "").trim() || "—"}</td>
+                          <td>{formatDateTime(entry?.request_at)}</td>
+                          <td>{formatDateTime(entry?.bill_at ?? entry?.start)}</td>
+                          <td>{formatDateTime(entry?.completed_at ?? entry?.end)}</td>
+                          <td>{String(entry?.issue_type ?? "").trim() || "—"}</td>
+                        </tr>
+                      ))
                     ) : (
                       <tr>
-                        <td colSpan={5}>No pharmacy logs yet.</td>
+                        <td colSpan={6}>
+                          {tracking.consult_end
+                            ? "Waiting for pharmacy sale in HIS…"
+                            : "End consultation to load pharmacy from HIS."}
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -1305,51 +981,37 @@ export const TokenDetailPage = () => {
               </div>
 
               <div className="table-card">
-                <h4>Lab Logs</h4>
+                <h4>Lab (HIS)</h4>
                 <table>
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Start time</th>
-                      <th>End time</th>
-                      <th>Payment time</th>
-                      <th>Payments</th>
+                      <th>Req</th>
+                      <th>Request time</th>
+                      <th>Sample received</th>
+                      <th>Completed</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(Array.isArray(tracking.lab_logs) ? tracking.lab_logs : []).length ? (
-                      [...(tracking.lab_logs ?? [])].reverse().map((entry, idx) => {
-                        const chronoIndex = (tracking.lab_logs ?? []).length - 1 - idx;
-                        const billed = labLabelPayments[chronoIndex]?.paid_at ?? null;
-                        const elapsedEnd = billed ?? tracking.billing_end ?? null;
-                        const billedSeconds = elapsedEnd
-                          ? toSecondsFromRange(entry?.start, elapsedEnd, nowMs)
-                          : null;
-                        return (
-                          <tr key={`lab-time-log-${idx}`}>
-                            <td>{idx + 1}</td>
-                            <td>{formatDateTime(entry?.start)}</td>
-                            <td>{formatDateTime(entry?.end)}</td>
-                            <td>{formatDateTime(elapsedEnd)}</td>
-                            <td>
-                              {labPaymentsBySession[chronoIndex]?.length ? (
-                                <div className="session-payments-list">
-                                  {labPaymentsBySession[chronoIndex].map((p, pIdx) => (
-                                    <span key={`lab-pay-${idx}-${pIdx}`}>
-                                      {Number(p?.amount ?? 0)} @ {formatDateTime(p?.paid_at)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                "--"
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
+                    {labLogs.length ? (
+                      [...labLogs].reverse().map((entry, idx) => (
+                        <tr key={`lab-time-log-${idx}-${entry?.request_no ?? ""}`}>
+                          <td>{idx + 1}</td>
+                          <td>{String(entry?.request_no ?? "").trim() || "—"}</td>
+                          <td>{formatDateTime(entry?.request_at)}</td>
+                          <td>{formatDateTime(entry?.sample_received_at ?? entry?.start)}</td>
+                          <td>{formatDateTime(entry?.completed_at ?? entry?.end)}</td>
+                          <td>{String(entry?.status ?? "").trim() || "—"}</td>
+                        </tr>
+                      ))
                     ) : (
                       <tr>
-                        <td colSpan={5}>No lab logs yet.</td>
+                        <td colSpan={6}>
+                          {tracking.consult_end
+                            ? "Waiting for lab orders in HIS…"
+                            : "End consultation to load lab from HIS."}
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -1364,8 +1026,7 @@ export const TokenDetailPage = () => {
                       <th>#</th>
                       <th>Start time</th>
                       <th>End time</th>
-                      <th>Payment time</th>
-                      <th>Payments</th>
+                      <th>Bill time (HIS)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1374,34 +1035,18 @@ export const TokenDetailPage = () => {
                         const chronoIndex = (tracking.treatment_logs ?? []).length - 1 - idx;
                         const billed = treatmentLabelPayments[chronoIndex]?.paid_at ?? null;
                         const elapsedEnd = billed ?? tracking.billing_end ?? null;
-                        const billedSeconds = elapsedEnd
-                          ? toSecondsFromRange(entry?.start, elapsedEnd, nowMs)
-                          : null;
                         return (
                           <tr key={`treatment-time-log-${idx}`}>
                             <td>{idx + 1}</td>
                             <td>{formatDateTime(entry?.start)}</td>
                             <td>{formatDateTime(entry?.end)}</td>
                             <td>{formatDateTime(elapsedEnd)}</td>
-                            <td>
-                              {treatmentPaymentsBySession[chronoIndex]?.length ? (
-                                <div className="session-payments-list">
-                                  {treatmentPaymentsBySession[chronoIndex].map((p, pIdx) => (
-                                    <span key={`tr-pay-${idx}-${pIdx}`}>
-                                      {Number(p?.amount ?? 0)} @ {formatDateTime(p?.paid_at)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                "--"
-                              )}
-                            </td>
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={5}>No treatment logs yet.</td>
+                        <td colSpan={4}>No treatment logs yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -1413,164 +1058,48 @@ export const TokenDetailPage = () => {
 
         <aside className="detail-side">
           <section className="card">
-            <h3>Billing Desk</h3>
+            <h3>Billing (HIS)</h3>
+            <p className="muted-inline">
+              Loaded automatically from KMCH_Billing for{" "}
+              {token.patient_reg_no && token.patient_reg_no !== token.visit_id
+                ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
+                : `OP reg ${token.visit_id || "—"}`}
+              .
+            </p>
             <div className="vitals-grid" style={{ marginBottom: 12 }}>
               <div className="vital-card">
-                <p>Paid</p>
-                <h4>{Number(billingPaidAmount.toFixed(2))}</h4>
+                <p>Billing time</p>
+                <h4>{hasBillingStats ? billingDurationLabel : "—"}</h4>
               </div>
               <div className="vital-card">
-                <p>Status</p>
-                <h4>
-                  {tracking.billing_end
-                    ? "Ended"
-                    : tracking.billing_start
-                      ? "Active"
-                      : "Stopped"}
+                <p>Bill posted (HIS)</p>
+                <h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  {tracking.billing_end ? formatDateTime(tracking.billing_end) : "—"}
                 </h4>
               </div>
             </div>
-            <div className="journey-list">
-              <div className="journey-step">
-                <span className={`dot ${tracking.billing_start ? "done" : ""}`}>
-                  {tracking.billing_start ? "✓" : ""}
-                </span>
-                <div className="journey-step-body">
-                  <strong>Billing started</strong>
-                  <p className="journey-step-time">{formatDateTime(tracking.billing_start)}</p>
-                </div>
-              </div>
-              <div className="journey-step">
-                <span className={`dot ${tracking.billing_end ? "done" : ""}`}>
-                  {tracking.billing_end ? "✓" : ""}
-                </span>
-                <div className="journey-step-body">
-                  <strong>Payment recorded</strong>
-                  <p className="journey-step-time">{formatDateTime(tracking.billing_end)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="consult-modal-form" style={{ marginBottom: 8 }}>
-              <label htmlFor="billing_amount_input">Payment amount</label>
-              <div className="billing-amount-row">
-                <input
-                  id="billing_amount_input"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={billingAmountInput}
-                  onChange={(event) => setBillingAmountInput(event.target.value)}
-                  placeholder="e.g. 100"
-                />
-                <button
-                  type="button"
-                  className="billing-add-inline"
-                  onClick={() => runTokenAction("record_payment")}
-                  disabled={
-                    isActing ||
-                    !String(billingAmountInput ?? "").trim()
-                  }
-                  title="Add payment"
-                >
-                  +
-                </button>
-              </div>
-              <label htmlFor="billing_note_input">Payment note (optional)</label>
-              <input
-                id="billing_note_input"
-                type="text"
-                value={billingNoteInput}
-                onChange={(event) => setBillingNoteInput(event.target.value)}
-                placeholder="Cash / UPI ref / split payment"
-              />
-              <label htmlFor="billing_label_input">Billing label</label>
-              <select
-                id="billing_label_input"
-                value={billingLabelInput}
-                onChange={(event) => setBillingLabelInput(event.target.value)}
-              >
-                <option value="">General / untagged</option>
-                <option value="lab">Lab</option>
-                <option value="pharmacy">Pharmacy</option>
-                <option value="treatment">Treatment</option>
-              </select>
-            </div>
-            <div className="urgent-list">
-            </div>
-            {billingPayments.length ? (
-              <div className="table-card" style={{ marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Amount</th>
-                      <th>Label</th>
-                      <th>Paid at</th>
-                      <th>Billing elapsed time</th>
-                      <th>Overall elapsed time</th>
-                      <th>Note</th>
-                      {isAdmin ? <th>Actions</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {billingPayments.map((payment, idx) => (
-                      (() => {
-                        const label = String(payment?.label ?? "").trim().toLowerCase();
-                        const sessionStart =
-                          label === "pharmacy"
-                            ? getSessionStartForPayment(tracking.pharmacy_logs, payment?.paid_at)
-                            : label === "lab"
-                              ? getSessionStartForPayment(tracking.lab_logs, payment?.paid_at)
-                              : label === "treatment"
-                                ? getSessionStartForPayment(tracking.treatment_logs, payment?.paid_at)
-                                : null;
-                        const billingElapsed =
-                          sessionStart && payment?.paid_at
-                            ? formatSeconds(toSecondsFromRange(sessionStart, payment?.paid_at, nowMs))
-                            : "--";
-                        const overallElapsed =
-                          overallWorkflowStart && payment?.paid_at
-                            ? formatSeconds(
-                                toSecondsFromRange(overallWorkflowStart, payment?.paid_at, nowMs)
-                              )
-                            : "--";
-                        return (
-                          <tr key={`pay-${idx}-${payment?.paid_at ?? ""}`}>
-                            <td>{idx + 1}</td>
-                            <td>{Number(payment?.amount ?? 0)}</td>
-                            <td>{label || "--"}</td>
-                            <td>{formatDateTime(payment?.paid_at)}</td>
-                            <td>{billingElapsed}</td>
-                            <td>{overallElapsed}</td>
-                            <td>{String(payment?.note ?? "").trim() || "--"}</td>
-                            {isAdmin ? (
-                              <td>
-                                <div className="action-group">
-                                  <button type="button" onClick={() => editBillingPayment(payment)}>
-                                    Edit
-                                  </button>
-                                  <button type="button" onClick={() => removeBillingPayment(payment)}>
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            ) : null}
-                          </tr>
-                        );
-                      })()
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {!hasBillingStats ? (
+              <p className="muted-inline">Waiting for bill in HIS…</p>
+            ) : billingPayments.length > 1 ? (
+              <ul className="billing-his-times">
+                {billingPayments.map((payment, idx) => (
+                  <li key={`pay-${idx}-${payment?.paid_at ?? ""}`}>
+                    {formatDateTime(payment?.paid_at)}
+                    {String(payment?.note ?? "").trim()
+                      ? ` · ${String(payment.note).trim()}`
+                      : ""}
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </section>
           <section className="card">
             <h3>Patient Journey</h3>
-            {journeyLoading ? <p className="muted-inline">Updating timeline…</p> : null}
-            {journeyError ? <p className="error-text">{journeyError}</p> : null}
             <div className="journey-list journey-graph">
-              {(journeyFromApi ?? timeline).map((step, index, allSteps) => (
-                (() => {
+              {patientJourneySteps.length === 0 ? (
+                <p className="muted-inline">No journey steps yet.</p>
+              ) : (
+                patientJourneySteps.map((step, index, allSteps) => {
                   const labelLower = String(step?.label ?? "").toLowerCase();
                   const resolvedKind = String(step?.kind ?? "").toLowerCase();
                   const kindKey =
@@ -1585,51 +1114,76 @@ export const TokenDetailPage = () => {
                             ? "treatment"
                             : "core");
                   const isBillingStep = kindKey === "billing";
+                  const isPharmacyStep = kindKey === "pharmacy" || kindKey === "pharmacy_queue";
                   const billingItems = isBillingStep
                     ? [...billingPayments]
                         .map((p, idx) => ({
                           id: `bill-${idx}-${p?.paid_at ?? ""}`,
                           idx: idx + 1,
-                          amount: Number(p?.amount ?? 0),
-                          label: String(p?.label ?? "").trim() || "general",
-                          paidAt: p?.paid_at
+                          paidAt: p?.paid_at,
+                          note: String(p?.note ?? "").trim()
                         }))
                         .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime())
                     : [];
-                  const billingPrimary =
-                    isBillingStep && !billingItems.length && tracking.billing_start && !tracking.billing_end
-                      ? "Awaiting payment"
-                      : step.timePrimary ?? step.time;
+                  const pharmacyItems = isPharmacyStep
+                    ? pharmacyLogs.map((entry, idx) => ({
+                        id: `pharm-${idx}-${entry?.bill_no ?? ""}`,
+                        billNo: String(entry?.bill_no ?? "").trim() || `#${idx + 1}`,
+                        billAt: entry?.bill_at ?? entry?.start,
+                        completedAt: entry?.completed_at ?? entry?.end,
+                        issueType: String(entry?.issue_type ?? "").trim()
+                      }))
+                    : [];
+                  const timePrimary =
+                    isBillingStep && !billingItems.length && !tracking.billing_end
+                      ? "Awaiting bill in HIS"
+                      : isPharmacyStep &&
+                          !pharmacyItems.length &&
+                          !pharmacyHisTimes.billAt
+                        ? "Awaiting pharmacy in HIS"
+                        : step.timePrimary ?? step.time;
                   return (
-                <div
-                  key={`${step.label}-${index}`}
-                  className={`journey-step ${step.active ? "active" : ""} ${
-                    `journey-kind-${kindKey}`
-                  } ${
-                    index === allSteps.length - 1 ? "journey-step-last" : ""
-                  }`}
-                >
-                  <span className={`dot ${step.done ? "done" : ""}`}>{step.done ? "✓" : ""}</span>
-                  <div className="journey-step-body">
-                    <strong>{step.label}</strong>
-                    <p className="journey-step-time">{billingPrimary}</p>
-                    {step.timeSecondary ? (
-                      <p className="journey-step-sub">{step.timeSecondary}</p>
-                    ) : null}
-                    {isBillingStep && billingItems.length ? (
-                      <div className="journey-children">
-                        {billingItems.map((item) => (
-                          <p key={item.id} className="journey-child-row">
-                            Payment {item.idx} - {item.label} - {item.amount} @ {formatDateTime(item.paidAt)}
-                          </p>
-                        ))}
+                    <div
+                      key={`${step.label}-${index}`}
+                      className={`journey-step ${step.active ? "active" : ""} journey-kind-${kindKey} ${
+                        index === allSteps.length - 1 ? "journey-step-last" : ""
+                      }`}
+                    >
+                      <span className={`dot ${step.done ? "done" : ""}`}>
+                        {step.done ? "✓" : ""}
+                      </span>
+                      <div className="journey-step-body">
+                        <strong>{step.label}</strong>
+                        <p className="journey-step-time">{timePrimary}</p>
+                        {step.timeSecondary ? (
+                          <p className="journey-step-sub">{step.timeSecondary}</p>
+                        ) : null}
+                        {isBillingStep && billingItems.length ? (
+                          <div className="journey-children">
+                            {billingItems.map((item) => (
+                              <p key={item.id} className="journey-child-row">
+                                {item.note || `Payment ${item.idx}`} · {formatDateTime(item.paidAt)}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                        {isPharmacyStep && pharmacyItems.length > 1 ? (
+                          <div className="journey-children">
+                            {pharmacyItems.map((item) => (
+                              <p key={item.id} className="journey-child-row">
+                                Bill {item.billNo}
+                                {item.billAt ? ` · ${formatDateTime(item.billAt)}` : ""}
+                                {item.completedAt ? ` → ${formatDateTime(item.completedAt)}` : ""}
+                                {item.issueType ? ` (${item.issueType})` : ""}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
+                    </div>
                   );
-                })()
-              ))}
+                })
+              )}
             </div>
           </section>
           <section className="card">

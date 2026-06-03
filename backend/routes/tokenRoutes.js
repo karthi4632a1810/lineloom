@@ -11,10 +11,12 @@ import {
   endPharmacyHandler,
   deleteBillingPaymentHandler,
   getCompletedTokensHandler,
+  getExistingTokenHandler,
   getLiveQueueHandler,
   getTokenJourneyHandler,
   getTokenDetailHandler,
   recordBillingPaymentHandler,
+  syncBillingFromHisHandler,
   updateBillingPaymentHandler,
   startBillingHandler,
   startCare,
@@ -35,6 +37,7 @@ router.use(requireAuth);
 
 router.get("/queue/live", getLiveQueueHandler);
 router.get("/queue/completed", getCompletedTokensHandler);
+router.get("/existing", getExistingTokenHandler);
 router.get("/:id/journey", getTokenJourneyHandler);
 router.post(
   "/:id/step-back",
@@ -75,6 +78,11 @@ router.post(
   "/:id/record-billing-payment",
   authorizeRoles("admin", "doctor", "nurse"),
   recordBillingPaymentHandler
+);
+router.post(
+  "/:id/sync-billing-from-his",
+  authorizeRoles("admin", "doctor", "nurse"),
+  syncBillingFromHisHandler
 );
 router.patch(
   "/:id/billing-payments/:paymentId",

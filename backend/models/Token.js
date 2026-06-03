@@ -5,6 +5,8 @@ const tokenSchema = new mongoose.Schema(
     token_id: { type: String, required: true, unique: true, index: true },
     patient_id: { type: String, required: true, index: true },
     visit_id: { type: String, required: true, index: true },
+    /** Mast_Patient.iReg_No — pharmacy/lab often key on this, not OP reg alone. */
+    patient_reg_no: { type: String, default: "", trim: true },
     patient_name: { type: String, default: "", trim: true },
     patient_phone: { type: String, default: "", trim: true },
     department: { type: String, required: true, trim: true },

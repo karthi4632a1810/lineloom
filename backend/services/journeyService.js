@@ -67,6 +67,49 @@ const normalizeTimelineLogs = (logs = []) =>
     .filter((row) => row.start && !Number.isNaN(row.start.getTime()))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
+/** HIS pharmacy rows: bill_at / completed_at (fallback start/end). */
+const normalizePharmacyLogs = (logs = []) =>
+  (Array.isArray(logs) ? logs : [])
+    .map((row) => {
+      const start = row?.bill_at ?? row?.request_at ?? row?.start ?? null;
+      const end = row?.completed_at ?? row?.end ?? null;
+      const startDate = start ? new Date(start) : null;
+      if (!startDate || Number.isNaN(startDate.getTime())) {
+        return null;
+      }
+      const endDate = end ? new Date(end) : null;
+      const billNo = String(row?.bill_no ?? "").trim();
+      return {
+        start: startDate,
+        end: endDate && !Number.isNaN(endDate.getTime()) ? endDate : null,
+        bill_no: billNo,
+        issue_type: String(row?.issue_type ?? "").trim()
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+/** HIS lab rows: sample / request / complete times. */
+const normalizeLabLogs = (logs = []) =>
+  (Array.isArray(logs) ? logs : [])
+    .map((row) => {
+      const startRaw = row?.sample_received_at ?? row?.request_at ?? row?.start ?? null;
+      const endRaw = row?.completed_at ?? row?.end ?? null;
+      const startDate = startRaw ? new Date(startRaw) : null;
+      if (!startDate || Number.isNaN(startDate.getTime())) {
+        return null;
+      }
+      const endDate = endRaw ? new Date(endRaw) : null;
+      return {
+        start: startDate,
+        end: endDate && !Number.isNaN(endDate.getTime()) ? endDate : null,
+        request_no: String(row?.request_no ?? "").trim(),
+        procedure: String(row?.procedure ?? "").trim()
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
 /**
  * Ordered journey segments for a visit (chronological by start time).
  */
@@ -101,7 +144,7 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
   /** Lab queue is clinical only (billing is tracked separately, not on this timeline). */
   const inLabPath =
     Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
-  const labLogs = normalizeTimelineLogs(tracking.lab_logs);
+  const labLogs = normalizeLabLogs(tracking.lab_logs);
   const firstLabStart = labLogs[0]?.start ?? tracking.lab_start ?? null;
   if (tracking.consult_end && inLabPath) {
     const open = status === "CONSULTING" && !firstLabStart;
@@ -117,9 +160,10 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
   if (labLogs.length) {
     labLogs.forEach((row, idx) => {
       const open = status === "CONSULTING" && !row.end;
+      const reqLabel = row.request_no ? ` · Req ${row.request_no}` : "";
       candidates.push({
         kind: "lab",
-        label: labLogs.length > 1 ? `Lab testing #${idx + 1}` : "Lab testing",
+        label: labLogs.length > 1 ? `Lab #${idx + 1}${reqLabel}` : `Lab${reqLabel}`,
         start: row.start,
         end: row.end ?? null,
         duration_minutes: segmentDurationMinutes(row.start, row.end, open),
@@ -138,13 +182,27 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
     });
   }
 
-  const pharmacyLogs = normalizeTimelineLogs(tracking.pharmacy_logs);
+  const pharmacyLogs = normalizePharmacyLogs(tracking.pharmacy_logs);
+  if (tracking.consult_end && pharmacyLogs.length) {
+    const firstBill = pharmacyLogs[0]?.start;
+    if (firstBill && firstBill.getTime() > new Date(tracking.consult_end).getTime()) {
+      candidates.push({
+        kind: "pharmacy_queue",
+        label: "Pharmacy queue",
+        start: tracking.consult_end,
+        end: firstBill,
+        duration_minutes: segmentDurationMinutes(tracking.consult_end, firstBill, false),
+        in_progress: false
+      });
+    }
+  }
   if (pharmacyLogs.length) {
     pharmacyLogs.forEach((row, idx) => {
       const open = status === "CONSULTING" && !row.end;
+      const billLabel = row.bill_no ? ` · Bill ${row.bill_no}` : "";
       candidates.push({
         kind: "pharmacy",
-        label: pharmacyLogs.length > 1 ? `Pharmacy #${idx + 1}` : "Pharmacy",
+        label: pharmacyLogs.length > 1 ? `Pharmacy #${idx + 1}${billLabel}` : `Pharmacy${billLabel}`,
         start: row.start,
         end: row.end ?? null,
         duration_minutes: segmentDurationMinutes(row.start, row.end, open),

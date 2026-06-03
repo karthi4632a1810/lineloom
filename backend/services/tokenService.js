@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import { Token } from "../models/Token.js";
 import { TimeTracking } from "../models/TimeTracking.js";
 import { DepartmentFlow } from "../models/DepartmentFlow.js";
@@ -12,7 +13,12 @@ import {
   detectVisitStage,
   resolveStatusAfterRevert
 } from "./revertMilestones.js";
+import { resolveHisLookupDate } from "../utils/hisDates.js";
+import { fetchBillsForRegistrations } from "./billingHisService.js";
 import { fetchHisDepartments, fetchPatientDemographics } from "./hisService.js";
+import { resolveHisRegNumbersForToken } from "./hisRegResolveService.js";
+import { fetchLabHistoryForRegistrations } from "./labHisService.js";
+import { fetchPharmacyForRegistrations } from "./pharmacyHisService.js";
 
 const sendDebugLog = (hypothesisId = "", message = "", data = {}) => {
   // #region agent log
@@ -82,6 +88,45 @@ const sumBillingPayments = (payments = []) =>
       .toFixed(2)
   );
 
+const resolveBillingStartFromTracking = (tracking = {}, token = null) => {
+  if (tracking?.consult_end) {
+    const consultEnd = new Date(tracking.consult_end);
+    if (!Number.isNaN(consultEnd.getTime())) {
+      return consultEnd;
+    }
+  }
+  const candidateTimes = [];
+  const pushStart = (value) => {
+    if (!value) {
+      return;
+    }
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      candidateTimes.push(date.getTime());
+    }
+  };
+  pushStart(tracking?.lab_start);
+  pushStart(tracking?.pharmacy_start);
+  pushStart(tracking?.care_start);
+  for (const entry of [
+    ...(Array.isArray(tracking?.lab_logs) ? tracking.lab_logs : []),
+    ...(Array.isArray(tracking?.pharmacy_logs) ? tracking.pharmacy_logs : []),
+    ...(Array.isArray(tracking?.treatment_logs) ? tracking.treatment_logs : [])
+  ]) {
+    pushStart(entry?.start);
+  }
+  if (candidateTimes.length) {
+    return new Date(Math.min(...candidateTimes));
+  }
+  if (token?.created_at) {
+    const created = new Date(token.created_at);
+    if (!Number.isNaN(created.getTime())) {
+      return created;
+    }
+  }
+  return null;
+};
+
 const normalizeWorkflowLogs = (logs = []) =>
   Array.isArray(logs)
     ? logs
@@ -126,6 +171,30 @@ const isKnownDepartmentName = async (name = "") => {
 const isDuplicateKeyError = (error) =>
   error?.code === 11000 || String(error?.message ?? "").includes("E11000 duplicate key");
 
+const ACTIVE_TOKEN_STATUSES = ["WAITING", "ACTIVE", "CONSULTING", "IN_TREATMENT"];
+
+/** Non-completed token for the same patient visit in the same department. */
+export const findExistingActiveToken = async ({
+  patient_id = "",
+  visit_id = "",
+  department = ""
+} = {}) => {
+  const pid = String(patient_id ?? "").trim();
+  const vid = String(visit_id ?? "").trim();
+  const dept = String(department ?? "").trim();
+  if (!pid || !vid || !dept) {
+    return null;
+  }
+  return Token.findOne({
+    patient_id: pid,
+    visit_id: vid,
+    department: dept,
+    status: { $in: ACTIVE_TOKEN_STATUSES }
+  })
+    .sort({ created_at: -1 })
+    .lean();
+};
+
 /** Next display number for a department: max among active tokens + 1, or 1 if none. */
 const peekNextDepartmentQueueNo = async (department = "") => {
   const dept = String(department ?? "").trim();
@@ -145,6 +214,7 @@ export const createToken = async (input = {}) => {
   const visit_id = String(input?.visit_id ?? "").trim();
   const patient_name = String(input?.patient_name ?? "").trim();
   const patient_phone = String(input?.patient_phone ?? "").trim();
+  const patient_reg_no = String(input?.patient_reg_no ?? input?.i_reg_no ?? "").trim();
   const department = String(input?.department ?? "").trim();
 
   if (!patient_id || !visit_id || !department) {
@@ -154,6 +224,16 @@ export const createToken = async (input = {}) => {
   const deptOk = await isKnownDepartmentName(department);
   if (!deptOk) {
     throw new ApiError("Invalid department selected", 400);
+  }
+
+  const existing = await findExistingActiveToken({ patient_id, visit_id, department });
+  if (existing) {
+    const queueLabel =
+      existing.department_queue_no != null ? `#${existing.department_queue_no} ` : "";
+    throw new ApiError(
+      `Token already created for this visit in ${department}: ${queueLabel}(${existing.token_id}), status ${existing.status}.`,
+      409
+    );
   }
 
   sendDebugLog("H5", "Create token skips HIS revalidation by design", {
@@ -169,6 +249,7 @@ export const createToken = async (input = {}) => {
         token_id: generateTokenId(),
         patient_id,
         visit_id,
+        patient_reg_no,
         patient_name,
         patient_phone,
         department,
@@ -253,12 +334,344 @@ export const endConsulting = async (tokenId = "", payload = {}) => {
     labs_ordered: labsOrdered,
     post_consult_plans: plans
   };
-  const tracking = await updateTracking(tokenId, patch);
+  let tracking = await updateTracking(tokenId, patch);
   if (nextDepartment) {
     token.department = nextDepartment;
     await token.save();
   }
+  tracking = await trySyncAllHisForToken(tokenId, token, tracking);
   return { token, tracking, metrics: calculateTimeMetrics(tracking, token.status) };
+};
+
+/**
+ * Pull OP bill rows from KMCH_Billing (Astil_BillDetailReportOP_QB) and apply billing timer + payments.
+ */
+export const syncBillingFromHis = async (tokenId = "", options = {}) => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const regNos = await resolveHisRegNumbersForToken(token);
+  if (!regNos.length) {
+    throw new ApiError("Token visit registration number is required for HIS billing lookup", 400);
+  }
+  const lookupDate = options.on_date
+    ? new Date(options.on_date)
+    : resolveHisLookupDate(token, tracking);
+  const bills = await fetchBillsForRegistrations(regNos, lookupDate);
+  if (!bills.length) {
+    throw new ApiError("No HIS billing records found for this registration on the visit date", 404);
+  }
+  const patch = buildBillingTrackingPatch(bills, tracking, token);
+  if (!patch) {
+    throw new ApiError("No HIS billing records found for this registration on the visit date", 404);
+  }
+  const next = await updateTracking(tokenId, patch);
+  return {
+    token,
+    tracking: next,
+    metrics: calculateTimeMetrics(next, token.status),
+    his_bills: bills
+  };
+};
+
+const hasBillingData = (tracking = {}) => {
+  const payments = Array.isArray(tracking.billing_payments) ? tracking.billing_payments : [];
+  return (
+    payments.length > 0 ||
+    Boolean(tracking.billing_end) ||
+    Boolean(tracking.billing_start) ||
+    (Number(tracking.billing_elapsed_ms ?? 0) || 0) > 0
+  );
+};
+
+const buildBillingTrackingPatch = (bills = [], tracking = {}, token = null) => {
+  if (!bills.length) {
+    return null;
+  }
+  const sortedBills = [...bills].sort(
+    (a, b) => (a.bill_date?.getTime() ?? 0) - (b.bill_date?.getTime() ?? 0)
+  );
+  const billingStart = resolveBillingStartFromTracking(tracking, token);
+  const payments = sortedBills.map((bill) => ({
+    amount: bill.amount,
+    paid_at: bill.bill_date,
+    note: bill.bill_no ? `HIS bill ${bill.bill_no}` : "HIS billing",
+    label: ""
+  }));
+  const lastPaidAt = payments[payments.length - 1]?.paid_at ?? null;
+  let elapsedMs = 0;
+  if (billingStart && lastPaidAt) {
+    elapsedMs = Math.max(lastPaidAt.getTime() - billingStart.getTime(), 0);
+  }
+  const paidAmount = sumBillingPayments(payments);
+  return {
+    billing_start: null,
+    billing_end: lastPaidAt,
+    billing_elapsed_ms: elapsedMs,
+    billing_payments: payments,
+    billing_paid_amount: paidAmount,
+    billing_total_amount: paidAmount
+  };
+};
+
+const buildLabLogsFromHis = (groups = []) =>
+  groups.map((group) => {
+    const sampleAt = group.sample_received_at ?? null;
+    const completedAt = group.completed_at ?? null;
+    return {
+      request_at: group.request_at ?? null,
+      sample_received_at: sampleAt,
+      completed_at: completedAt,
+      request_no: String(group.request_no ?? ""),
+      procedure: String(group.procedure ?? ""),
+      dept: String(group.dept ?? ""),
+      status: String(group.status ?? ""),
+      start: sampleAt ?? group.request_at ?? null,
+      end: completedAt
+    };
+  });
+
+const buildLabTrackingPatch = (groups = []) => {
+  if (!groups.length) {
+    return null;
+  }
+  const lab_logs = buildLabLogsFromHis(groups);
+  const sampleTimes = lab_logs
+    .map((entry) => entry.sample_received_at ?? entry.start)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const requestTimes = lab_logs
+    .map((entry) => entry.request_at)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const completedTimes = lab_logs
+    .map((entry) => entry.completed_at ?? entry.end)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const lab_start = sampleTimes.length
+    ? new Date(Math.min(...sampleTimes))
+    : requestTimes.length
+      ? new Date(Math.min(...requestTimes))
+      : null;
+  const allCompleted = lab_logs.length > 0 && lab_logs.every((entry) => entry.completed_at || entry.end);
+  const lab_end =
+    allCompleted && completedTimes.length ? new Date(Math.max(...completedTimes)) : null;
+  return { labs_ordered: true, lab_logs, lab_start, lab_end };
+};
+
+const needsLabHisSync = (tracking = {}) => {
+  const inLabPath =
+    Boolean(tracking.labs_ordered) ||
+    Boolean(tracking.lab_start) ||
+    Boolean(tracking.lab_end) ||
+    (Array.isArray(tracking.lab_logs) && tracking.lab_logs.length > 0);
+  if (!tracking.consult_end || !inLabPath) {
+    return false;
+  }
+  const logs = Array.isArray(tracking.lab_logs) ? tracking.lab_logs : [];
+  if (!logs.length) {
+    return true;
+  }
+  return !logs.every((entry) => entry.completed_at || entry.end);
+};
+
+const needsPharmacyHisSync = (tracking = {}) => {
+  if (!tracking.consult_end) {
+    return false;
+  }
+  const logs = Array.isArray(tracking.pharmacy_logs) ? tracking.pharmacy_logs : [];
+  if (!logs.length) {
+    return true;
+  }
+  return !logs.every((entry) => entry.completed_at || entry.end);
+};
+
+const safeHisFetch = async (loader = async () => []) => {
+  try {
+    return await loader();
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Pull lab rows from KMCH_Lab (LabTestResultHistoryQB) and apply request / sample / complete times.
+ */
+export const syncLabFromHis = async (tokenId = "", options = {}) => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const regNos = await resolveHisRegNumbersForToken(token);
+  if (!regNos.length) {
+    throw new ApiError("Token visit registration number is required for HIS lab lookup", 400);
+  }
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before syncing lab from HIS", 400);
+  }
+  const lookupDate = options.on_date
+    ? new Date(options.on_date)
+    : resolveHisLookupDate(token, tracking);
+  const groups = await fetchLabHistoryForRegistrations(regNos, lookupDate);
+  if (!groups.length) {
+    throw new ApiError("No HIS lab records found for this registration on the visit date", 404);
+  }
+  const labPatch = buildLabTrackingPatch(groups);
+  const next = await updateTracking(tokenId, labPatch);
+  return {
+    token,
+    tracking: next,
+    metrics: calculateTimeMetrics(next, token.status),
+    his_lab: groups
+  };
+};
+
+const buildPharmacyLogsFromHis = (groups = []) =>
+  groups.map((group) => {
+    const billAt = group.bill_at ?? group.request_at ?? null;
+    const completedAt = group.completed_at ?? null;
+    return {
+      request_at: group.request_at ?? null,
+      bill_at: billAt,
+      completed_at: completedAt,
+      bill_no: String(group.bill_no ?? ""),
+      request_no: String(group.request_no ?? ""),
+      issue_type: String(group.issue_type ?? ""),
+      dept: String(group.dept ?? ""),
+      start: billAt,
+      end: completedAt
+    };
+  });
+
+const buildPharmacyTrackingPatch = (groups = [], tracking = {}) => {
+  if (!groups.length) {
+    return null;
+  }
+  const pharmacy_logs = buildPharmacyLogsFromHis(groups);
+  const billTimes = pharmacy_logs
+    .map((entry) => entry.bill_at ?? entry.start)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const requestTimes = pharmacy_logs
+    .map((entry) => entry.request_at)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const completedTimes = pharmacy_logs
+    .map((entry) => entry.completed_at ?? entry.end)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const pharmacy_start = billTimes.length
+    ? new Date(Math.min(...billTimes))
+    : requestTimes.length
+      ? new Date(Math.min(...requestTimes))
+      : null;
+  const allCompleted =
+    pharmacy_logs.length > 0 && pharmacy_logs.every((entry) => entry.completed_at || entry.end);
+  const pharmacy_end =
+    allCompleted && completedTimes.length ? new Date(Math.max(...completedTimes)) : null;
+  let elapsedMs = 0;
+  if (pharmacy_start && pharmacy_end) {
+    elapsedMs = Math.max(pharmacy_end.getTime() - pharmacy_start.getTime(), 0);
+  }
+  const existingPlans = Array.isArray(tracking.post_consult_plans) ? tracking.post_consult_plans : [];
+  const plans = [...new Set([...existingPlans.map(String), "pharmacy"])];
+  return {
+    post_consult_plans: plans,
+    pharmacy_logs,
+    pharmacy_start,
+    pharmacy_end,
+    pharmacy_elapsed_ms: elapsedMs
+  };
+};
+
+/** Parallel HIS fetch + single Mongo update (used on token detail, consult end, polls). */
+const trySyncAllHisForToken = async (tokenId = "", token = null, tracking = null) => {
+  if (!env.hisEnabled) {
+    return tracking;
+  }
+  const resolvedToken = token ?? (await getTokenOrThrow(tokenId));
+  const resolvedTracking = tracking ?? (await ensureTrackingRecord(tokenId));
+  if (resolvedToken.status === "COMPLETED") {
+    return resolvedTracking;
+  }
+  if (!resolvedTracking.consult_end) {
+    return resolvedTracking;
+  }
+  const regNos = await resolveHisRegNumbersForToken(resolvedToken);
+  if (!regNos.length) {
+    return resolvedTracking;
+  }
+
+  const needLab = needsLabHisSync(resolvedTracking);
+  const needPharmacy = needsPharmacyHisSync(resolvedTracking);
+  const needBilling = !hasBillingData(resolvedTracking);
+  if (!needLab && !needPharmacy && !needBilling) {
+    return resolvedTracking;
+  }
+
+  const lookupDate = resolveHisLookupDate(resolvedToken, resolvedTracking);
+  const [labGroups, pharmacyGroups, bills] = await Promise.all([
+    needLab
+      ? safeHisFetch(() => fetchLabHistoryForRegistrations(regNos, lookupDate))
+      : Promise.resolve([]),
+    needPharmacy
+      ? safeHisFetch(() => fetchPharmacyForRegistrations(regNos, lookupDate))
+      : Promise.resolve([]),
+    needBilling
+      ? safeHisFetch(() => fetchBillsForRegistrations(regNos, lookupDate))
+      : Promise.resolve([])
+  ]);
+
+  const patch = {};
+  const labPatch = buildLabTrackingPatch(labGroups);
+  if (labPatch) {
+    Object.assign(patch, labPatch);
+  }
+  const pharmacyPatch = buildPharmacyTrackingPatch(pharmacyGroups, resolvedTracking);
+  if (pharmacyPatch) {
+    Object.assign(patch, pharmacyPatch);
+  }
+  const billingPatch = buildBillingTrackingPatch(bills, resolvedTracking, resolvedToken);
+  if (billingPatch) {
+    Object.assign(patch, billingPatch);
+  }
+  if (!Object.keys(patch).length) {
+    return resolvedTracking;
+  }
+  return updateTracking(tokenId, patch);
+};
+
+/**
+ * Pull pharmacy sales from KMCH_Pharmacy (Pharm_Rpt_Sales_Details_QB).
+ */
+export const syncPharmacyFromHis = async (tokenId = "", options = {}) => {
+  const token = await getTokenOrThrow(tokenId);
+  const tracking = await ensureTrackingRecord(tokenId);
+  const regNos = await resolveHisRegNumbersForToken(token);
+  if (!regNos.length) {
+    throw new ApiError("Token visit registration number is required for HIS pharmacy lookup", 400);
+  }
+  if (!tracking.consult_end) {
+    throw new ApiError("End consultation before syncing pharmacy from HIS", 400);
+  }
+  const lookupDate = options.on_date
+    ? new Date(options.on_date)
+    : resolveHisLookupDate(token, tracking);
+  const groups = await fetchPharmacyForRegistrations(regNos, lookupDate);
+  if (!groups.length) {
+    throw new ApiError("No HIS pharmacy records found for this registration on the visit date", 404);
+  }
+  const pharmacyPatch = buildPharmacyTrackingPatch(groups, tracking);
+  const next = await updateTracking(tokenId, pharmacyPatch);
+  return {
+    token,
+    tracking: next,
+    metrics: calculateTimeMetrics(next, token.status),
+    his_pharmacy: groups
+  };
 };
 
 /** Patient paid at billing after consult (labs/tests path). */
@@ -486,7 +899,7 @@ export const endPharmacyPhase = async (tokenId = "") => {
     const segmentMs = Math.max(now.getTime() - new Date(tracking.pharmacy_start).getTime(), 0);
     elapsedMs += Number.isNaN(segmentMs) ? 0 : segmentMs;
   }
-  const next = await updateTracking(tokenId, {
+  let next = await updateTracking(tokenId, {
     pharmacy_start: null,
     pharmacy_end: now,
     pharmacy_logs: closeWorkflowLastOpen(tracking.pharmacy_logs, now),
@@ -501,6 +914,7 @@ export const endPharmacyPhase = async (tokenId = "") => {
         }
       : {})
   });
+  next = await trySyncAllHisForToken(tokenId, token, next);
   return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
@@ -600,10 +1014,11 @@ export const endLabTesting = async (tokenId = "") => {
     throw new ApiError("Lab testing has already ended", 400);
   }
   const now = new Date();
-  const next = await updateTracking(tokenId, {
+  let next = await updateTracking(tokenId, {
     lab_end: now,
     lab_logs: closeWorkflowLastOpen(tracking.lab_logs, now)
   });
+  next = await trySyncAllHisForToken(tokenId, token, next);
   return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
 };
 
@@ -1031,7 +1446,8 @@ export const getCompletedTokens = async (filters = {}) => {
 
 export const getTokenDetail = async (tokenId = "") => {
   const token = await getTokenOrThrow(tokenId);
-  const tracking = await ensureTrackingRecord(token.token_id);
+  let tracking = await ensureTrackingRecord(token.token_id);
+  tracking = await trySyncAllHisForToken(tokenId, token, tracking);
   const demoByPatientId = await loadDemographicsByPatientId([token]);
   const patient = {
     name: displayPatientName(token, demoByPatientId),

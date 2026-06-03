@@ -892,6 +892,34 @@ tr.clickable-row {
   cursor: not-allowed;
 }
 
+.token-existing-warning {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.92rem;
+}
+
+.token-existing-warning p {
+  margin: 0 0 6px;
+}
+
+.token-existing-warning p:last-of-type {
+  margin-bottom: 8px;
+}
+
+.token-existing-link {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.token-existing-link:hover {
+  text-decoration: underline;
+}
+
 .token-modal-note {
   margin: 2px 0 8px;
   color: #475569;
@@ -1433,6 +1461,13 @@ tr.clickable-row {
   color: #334155;
 }
 
+.billing-his-times {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted, #64748b);
+  font-size: 0.9rem;
+}
+
 .billing-amount-row {
   display: flex;
   align-items: center;
@@ -1591,8 +1626,13 @@ tr.clickable-row {
   border-color: #8b5cf6;
 }
 
-.journey-graph .journey-step.journey-kind-pharmacy .dot {
+.journey-graph .journey-step.journey-kind-pharmacy .dot,
+.journey-graph .journey-step.journey-kind-pharmacy_queue .dot {
   border-color: #f59e0b;
+}
+
+.journey-graph .journey-step.journey-kind-lab_queue .dot {
+  border-color: #0891b2;
 }
 
 .journey-graph .journey-step.journey-kind-lab .dot {

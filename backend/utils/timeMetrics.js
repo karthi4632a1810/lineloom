@@ -1,3 +1,5 @@
+import { resolveLabTimes } from "./labTimes.js";
+
 const toMs = (start = null, end = null) => {
   if (!start || !end) {
     return null;
@@ -50,15 +52,22 @@ export const calculateTimeMetrics = (tracking = {}, status = null) => {
   const billingMs = billingMsRaw > 0 ? billingMsRaw : toMs(tracking.billing_start, tracking.billing_end);
   const inLabPath =
     Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
+  const { requestAt, sampleAt, completedAt } = resolveLabTimes(tracking);
+  const labWorkStart = sampleAt ?? requestAt ?? (tracking.lab_start ? new Date(tracking.lab_start) : null);
   let labWaitMs = null;
   if (tracking.consult_end && inLabPath) {
-    if (tracking.lab_start) {
-      labWaitMs = toMs(tracking.consult_end, tracking.lab_start);
+    if (labWorkStart) {
+      labWaitMs = toMs(tracking.consult_end, labWorkStart);
     } else if (String(status ?? "") === "CONSULTING") {
       labWaitMs = Math.max(Date.now() - new Date(tracking.consult_end).getTime(), 0);
     }
   }
-  const labMs = toMs(tracking.lab_start, tracking.lab_end);
+  const labTestStart = sampleAt ?? tracking.lab_start;
+  const labTestEnd = completedAt ?? tracking.lab_end;
+  let labMs = toMs(labTestStart, labTestEnd);
+  if (labMs == null && labTestStart && !labTestEnd && inLabPath) {
+    labMs = Math.max(Date.now() - new Date(labTestStart).getTime(), 0);
+  }
 
   return {
     waiting_time_minutes: toMinutes(waitingMs),

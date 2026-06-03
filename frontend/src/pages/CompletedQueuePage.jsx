@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchCompletedQueue } from "../services/tokenService";
+import { tokenDetailPath } from "../utils/tokenPaths.js";
 
 const formatDateTime = (value = null) => {
   if (!value) {
@@ -118,7 +119,7 @@ export const CompletedQueuePage = () => {
                     if (!cleanId) {
                       return;
                     }
-                    navigate(`/tokens/${cleanId}`);
+                    navigate(tokenDetailPath(cleanId));
                   }}
                 >
                   <td className="col-token-no">

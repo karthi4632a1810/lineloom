@@ -14,6 +14,7 @@ import {
   revertTokenRequest
 } from "../services/tokenService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
+import { tokenDetailPath } from "../utils/tokenPaths.js";
 
 const formatDateTime = (value = null) => {
   if (!value) {
@@ -370,7 +371,7 @@ export const LiveQueuePage = () => {
                     if (!cleanId) {
                       return;
                     }
-                    navigate(`/tokens/${cleanId}`);
+                    navigate(tokenDetailPath(cleanId));
                   }}
                   role="button"
                   tabIndex={0}
@@ -381,7 +382,7 @@ export const LiveQueuePage = () => {
                       if (!cleanId) {
                         return;
                       }
-                      navigate(`/tokens/${cleanId}`);
+                      navigate(tokenDetailPath(cleanId));
                     }
                   }}
                 >

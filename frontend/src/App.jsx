@@ -49,7 +49,7 @@ export default function App() {
           element={<Navigate to="/tokens/T-SEED-001" replace />}
         />
         <Route
-          path="/tokens/:tokenId"
+          path="/tokens/*"
           element={
             <ProtectedRoute>
               <AppLayout>

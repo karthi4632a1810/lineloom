@@ -862,6 +862,55 @@ export const fetchPatientDemographics = async (patientIds = []) => {
   }
 };
 
+/**
+ * Patient master reg (iReg_No) — used by pharmacy/lab reports as "REG / IP NO".
+ */
+export const fetchPatientRegNoForVisit = async (patientId = "", visitId = "") => {
+  if (!env.hisEnabled) {
+    return "";
+  }
+  const id = String(patientId ?? "").trim();
+  const visit = String(visitId ?? "").trim();
+  if (!id || !visit) {
+    return "";
+  }
+  const cacheKey = `his:ireg:${id}:${visit}`;
+  const cached = getCache(cacheKey);
+  if (typeof cached === "string") {
+    return cached;
+  }
+  const query = `
+    SELECT TOP 1 i_reg_no FROM (
+      SELECT CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no
+      FROM [dbo].[Mast_OP_Admission] op
+      INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
+      WHERE CAST(pm.iPat_id AS VARCHAR(100)) = @patientId
+        AND CAST(op.iOP_Reg_No AS VARCHAR(100)) = @visitId
+      UNION ALL
+      SELECT CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no
+      FROM [dbo].[Mast_IP_Admission] ip
+      INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
+      WHERE CAST(pm.iPat_id AS VARCHAR(100)) = @patientId
+        AND CAST(ip.iIP_Reg_No AS VARCHAR(100)) = @visitId
+    ) r
+    WHERE LTRIM(RTRIM(i_reg_no)) <> '';
+  `;
+  try {
+    const rows = await executeHisQueryWithRetry(query, 10000, (request) => {
+      request.input("patientId", sql.VarChar(100), id);
+      request.input("visitId", sql.VarChar(100), visit);
+    });
+    const regNo = String(rows[0]?.i_reg_no ?? "").trim();
+    setCache(cacheKey, regNo, CACHE_TTL.EXISTS);
+    return regNo;
+  } catch (error) {
+    logger.error("Failed to resolve patient iReg_No from HIS", {
+      message: error?.message ?? "Unknown SQL error"
+    });
+    return "";
+  }
+};
+
 export const checkPatientExistsInHis = async (patientId = "", visitId = "") => {
   if (!env.hisEnabled) {
     return true;
