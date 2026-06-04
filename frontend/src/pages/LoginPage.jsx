@@ -68,7 +68,7 @@ export const LoginPage = () => {
             Welcome back
           </h1>
           <p className="login-subtitle">
-            Sign in to <strong>Patient Waiting Time Tracker</strong> to manage queues and tokens.
+            Sign in to <strong>Clinical Curator</strong> to manage queues, visits, and patient journeys.
           </p>
         </header>
 

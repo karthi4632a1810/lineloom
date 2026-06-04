@@ -9,9 +9,28 @@ const parseBoolean = (value, fallback = false) => {
   return String(value).toLowerCase() === "true";
 };
 
+const parseIntList = (value, fallback = []) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return fallback;
+  }
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((part) => Number(part.trim()))
+        .filter((n) => Number.isFinite(n))
+    )
+  ];
+};
+
 export const env = {
   /** When false, HIS/SQL Server is never contacted (empty search, no pool connect). Default true. */
   hisEnabled: parseBoolean(process.env.HIS_ENABLED, true),
+  /** Wall-clock timezone label (display only; admission times come verbatim from SQL). */
+  hospitalTimeZone: process.env.HOSPITAL_TIMEZONE ?? "Asia/Kolkata",
+  /** HIS Mast_Patient.iUser_id values for Z / mock registrations (default: 9999). */
+  hisMockUserIds: parseIntList(process.env.HIS_MOCK_USER_IDS, [9999]),
   port: Number(process.env.PORT ?? 5000),
   mongoUri:
     process.env.MONGO_URI ??

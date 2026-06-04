@@ -45,7 +45,8 @@ test("buildTatMetrics: break is tracked but not in overall_tat", () => {
     (m.billing_tat_minutes ?? 0) +
     (m.lab_wait_tat_minutes ?? 0) +
     (m.lab_test_tat_minutes ?? 0) +
-    (m.treatment_tat_minutes ?? 0);
+    (m.treatment_tat_minutes ?? 0) +
+    (m.pharmacy_tat_minutes ?? 0);
   assert.equal(m.overall_tat_minutes, Number(sumStages.toFixed(2)));
 });
 

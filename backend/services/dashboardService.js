@@ -1,6 +1,8 @@
 import { Token } from "../models/Token.js";
 import { TimeTracking } from "../models/TimeTracking.js";
 import { resolveEffectiveTreatmentStart } from "../utils/timeMetrics.js";
+import { resolvePharmacyTimes } from "../utils/pharmacyTimes.js";
+import { resolveVisitCompletedAt } from "../utils/visitCompletion.js";
 import { fetchPatientDemographics } from "./hisService.js";
 
 const rowNamePhoneFromHis = (token = {}, demoByPatientId = {}) => {
@@ -105,7 +107,19 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     tracking.break_end,
     Boolean(tracking.break_start) && !tracking.break_end
   );
-  const overall = [waiting, consulting, labWait, labTest, treatment]
+  const pharmacyElapsedMs = Math.max(0, Number(tracking.pharmacy_elapsed_ms ?? 0) || 0);
+  const pharmacyTimes = resolvePharmacyTimes(tracking);
+  let pharmacyTat =
+    pharmacyElapsedMs > 0 ? Number((pharmacyElapsedMs / 60000).toFixed(2)) : null;
+  if (pharmacyTat == null && pharmacyTimes.billAt && pharmacyTimes.completedAt) {
+    pharmacyTat = minutesBetween(pharmacyTimes.billAt, pharmacyTimes.completedAt, false);
+  }
+  const visitCompletedAt = resolveVisitCompletedAt(tracking, { status });
+  const overallVisit =
+    tracking.waiting_start && visitCompletedAt
+      ? minutesBetween(tracking.waiting_start, visitCompletedAt, false)
+      : null;
+  const overall = [waiting, consulting, labWait, labTest, treatment, pharmacyTat, billing]
     .filter((value) => value != null)
     .reduce((sum, value) => sum + value, 0);
   return {
@@ -115,7 +129,10 @@ export const buildTatMetrics = (tracking = {}, status = "WAITING") => {
     lab_wait_tat_minutes: labWait,
     lab_test_tat_minutes: labTest,
     treatment_tat_minutes: treatment,
+    pharmacy_tat_minutes: pharmacyTat,
     break_tat_minutes: breakTat,
+    visit_completed_at: visitCompletedAt,
+    overall_visit_minutes: overallVisit,
     overall_tat_minutes: Number(overall.toFixed(2))
   };
 };

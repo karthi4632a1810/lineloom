@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
 import { fetchHisDepartments } from "../services/dashboardService";
 import { searchHisPatients } from "../services/hisService";
 import { checkExistingTokenRequest, createTokenRequest } from "../services/tokenService";
+import { formatDateTimeDisplay } from "../utils/dateTimeDisplay.js";
 import { tokenDetailPath } from "../utils/tokenPaths.js";
 
 const initialForm = { patient_id: "", visit_id: "", patient_reg_no: "", department: "" };
@@ -14,27 +16,6 @@ const getTodayDateInputValue = () => {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-};
-
-const formatDateTime12h = (value = "") => {
-  const raw = String(value ?? "").trim();
-  if (!raw) {
-    return "-";
-  }
-  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) {
-    return raw;
-  }
-  return parsed.toLocaleString("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  });
 };
 
 export const TokenCreationPage = () => {
@@ -232,8 +213,11 @@ export const TokenCreationPage = () => {
   };
 
   return (
-    <section className="page token-create-page">
-      <h2>Create Token</h2>
+    <section className="page cc-page token-create-page">
+      <ClinicalPageHeader
+        title="Create token"
+        subtitle="Search HIS patients, select a visit, and start a new queue token for the department."
+      />
       <form className="card token-search-card token-search-filters" onSubmit={handleSearch}>
         <div className="token-search-fields">
           <label className="token-search-field">
@@ -291,6 +275,7 @@ export const TokenCreationPage = () => {
             <thead>
               <tr>
                   <th>SI No</th>
+                  <th>iReg_No</th>
                   <th>
                     <div className="token-type-filter-head">
                       <select
@@ -305,7 +290,6 @@ export const TokenCreationPage = () => {
                       </select>
                     </div>
                   </th>
-                  <th>IP / OP Reg No</th>
                   <th>Admission</th>
                   <th>
                     <div className="token-type-filter-head">
@@ -324,7 +308,7 @@ export const TokenCreationPage = () => {
                       </select>
                     </div>
                   </th>
-                  <th>iReg_No</th>
+                  <th>IP / OP Reg No</th>
                   <th>cPat_Name</th>
                   <th>dDob</th>
                   <th>
@@ -372,13 +356,13 @@ export const TokenCreationPage = () => {
                 filteredResults.map((patient, index) => (
                   <tr key={`${patient.type ?? "?"}-${patient.patient_id}-${patient.visit_id}`}>
                     <td>{index + 1}</td>
+                    <td>{patient.i_reg_no ?? "-"}</td>
                     <td>
                       <span className="visit-type-pill" data-type={patient.type ?? ""}>
                         {patient.type === "IP" ? "IP" : "OP"}
                       </span>
                     </td>
-                    <td>{patient.reg_no ?? patient.visit_id ?? "-"}</td>
-                    <td>{formatDateTime12h(patient.admission)}</td>
+                    <td>{formatDateTimeDisplay(patient.admission, "-")}</td>
                     <td>
                       {patient.type === "IP"
                         ? patient.ip_active !== undefined && patient.ip_active !== ""
@@ -386,7 +370,7 @@ export const TokenCreationPage = () => {
                           : "—"
                         : "—"}
                     </td>
-                    <td>{patient.i_reg_no ?? "-"}</td>
+                    <td>{patient.reg_no ?? patient.visit_id ?? "-"}</td>
                     <td>{patient.c_pat_name ?? patient.name ?? "-"}</td>
                     <td>{patient.d_dob ?? "-"}</td>
                     <td>{patient.c_sex ?? "-"}</td>

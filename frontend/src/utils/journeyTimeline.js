@@ -1,5 +1,6 @@
 import { resolveLabTimes } from "./labTimes.js";
 import { resolvePharmacyTimes } from "./pharmacyTimes.js";
+import { resolveVisitCompletedAt } from "./visitCompletion.js";
 
 const toMs = (value) => {
   if (!value) {
@@ -227,12 +228,14 @@ export const buildJourneyStepsFromTracking = (tracking = {}, token = {}) => {
   }
 
   if (token.status === "COMPLETED") {
+    const visitEnd = resolveVisitCompletedAt(tracking, token);
+    const visitStart = tracking.waiting_start ?? tracking.consult_start ?? null;
     steps.push({
       kind: "completed",
       label: "Visit completed",
-      start: tracking.care_end ?? billingEnd ?? tracking.pharmacy_end ?? tracking.consult_end,
-      end: null,
-      duration_minutes: null,
+      start: visitStart,
+      end: visitEnd,
+      duration_minutes: segmentMinutes(visitStart, visitEnd, false),
       in_progress: false
     });
   }
@@ -253,7 +256,10 @@ export const mapJourneyStepForDisplay = (seg = {}, formatDateTime = (v) => Strin
     : seg.duration_minutes != null
       ? `${seg.duration_minutes} min`
       : "--",
-  timeSecondary: `${formatDateTime(seg.start)}${seg.end ? ` → ${formatDateTime(seg.end)}` : ""}`,
+  timeSecondary:
+    seg.kind === "completed" && seg.end
+      ? `Completed ${formatDateTime(seg.end)}`
+      : `${formatDateTime(seg.start)}${seg.end ? ` → ${formatDateTime(seg.end)}` : ""}`,
   done: Boolean(seg.end) && !seg.in_progress,
   active: Boolean(seg.in_progress)
 });

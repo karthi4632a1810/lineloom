@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { searchHisPatients } from "../services/hisService";
 import { fetchTokenJourney } from "../services/journeyService";
-import { fetchPatientRecord } from "../services/patientRecordsService";
+import { fetchPatientRecord, searchPatientRecords } from "../services/patientRecordsService";
 import { getVisitPhaseChipClass } from "../utils/revertAnchors";
 
 const initialSearch = {
@@ -74,6 +73,17 @@ const getInitials = (name = "") =>
     .slice(0, 2)
     .map((chunk) => chunk[0]?.toUpperCase() ?? "")
     .join("") || "PR";
+
+const sourceLabel = (row = {}) => {
+  const source = String(row?.source ?? "").toLowerCase();
+  if (source === "both") {
+    return "HIS + LineLoom";
+  }
+  if (source === "lineloom") {
+    return "LineLoom";
+  }
+  return "HIS";
+};
 
 const getWorkflowBadges = (encounter = {}) => {
   const items = [];
@@ -168,25 +178,46 @@ const JourneyTimeline = ({ loading = false, error = "", steps = [], tracked = fa
   );
 };
 
-const LogList = ({ title = "", logs = [] }) => {
-  if (!logs.length) {
-    return null;
-  }
-  return (
-    <div className="patient-records-subsection">
-      <h4>{title}</h4>
-      <div className="patient-records-log-list">
-        {logs.map((entry, index) => (
-          <div key={`${title}-${entry.id}-${index}`} className="patient-records-log-row">
-            <strong>{title} #{index + 1}</strong>
-            <span>{formatDateTime(entry.start)}</span>
-            <span>{entry.end ? formatDateTime(entry.end) : "In progress"}</span>
-          </div>
-        ))}
+const DetailKv = ({ items = [] }) => (
+  <dl className="patient-records-kv">
+    {items.map((item) => (
+      <div key={item.label}>
+        <dt>{item.label}</dt>
+        <dd>{item.value ?? "--"}</dd>
       </div>
-    </div>
-  );
-};
+    ))}
+  </dl>
+);
+
+const WorkflowLogTable = ({ title = "", columns = [], rows = [], emptyMessage = "No records." }) => (
+  <div className="patient-records-subsection">
+    <h4>{title}</h4>
+    {!rows.length ? (
+      <p className="muted-inline">{emptyMessage}</p>
+    ) : (
+      <div className="patient-records-data-table-wrap">
+        <table className="patient-records-data-table">
+          <thead>
+            <tr>
+              {columns.map((col) => (
+                <th key={col.key}>{col.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={row._key ?? idx}>
+                {columns.map((col) => (
+                  <td key={col.key}>{row[col.key] ?? "—"}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+);
 
 export const PatientRecordsPage = () => {
   const [filters, setFilters] = useState(initialSearch);
@@ -226,10 +257,20 @@ export const PatientRecordsPage = () => {
           latest_admission: row?.admission ?? "",
           latest_department: String(row?.dept_name ?? row?.department ?? "").trim(),
           latest_type: String(row?.type ?? "").trim(),
+          latest_source: sourceLabel(row),
+          tracked: Boolean(row?.tracked),
+          lineloom_matches: row?.tracked ? 1 : 0,
           match_count: current?.match_count ?? 0
         };
       }
       acc[patientId].match_count = (acc[patientId]?.match_count ?? 0) + 1;
+      if (row?.tracked) {
+        acc[patientId].lineloom_matches = (acc[patientId].lineloom_matches ?? 0) + 1;
+        acc[patientId].tracked = true;
+      }
+      if (parseTime(row?.admission) >= parseTime(acc[patientId].latest_admission)) {
+        acc[patientId].latest_source = sourceLabel(row);
+      }
       return acc;
     }, {});
 
@@ -332,7 +373,7 @@ export const PatientRecordsPage = () => {
     setSearchError("");
     setHasSearched(true);
     try {
-      const rows = await searchHisPatients(filters);
+      const rows = await searchPatientRecords(filters);
       setSearchRows(Array.isArray(rows) ? rows : []);
     } catch (error) {
       setSearchRows([]);
@@ -356,15 +397,46 @@ export const PatientRecordsPage = () => {
 
   const summary = record?.summary ?? {};
   const patient = record?.patient ?? {};
+  const mongoTokens = Array.isArray(record?.mongodb?.tokens) ? record.mongodb.tokens : [];
   const journeySteps = Array.isArray(journeyState.data?.timeline) ? journeyState.data.timeline : [];
 
+  const selectedTracking = selectedEncounter?.time_tracking ?? {};
+  const labTableRows = (selectedTracking.lab_logs ?? []).map((entry, idx) => ({
+    _key: `lab-${entry.id ?? idx}`,
+    num: idx + 1,
+    req: entry.request_no || "—",
+    procedure: entry.procedure || "—",
+    dept: entry.dept || "—",
+    status: entry.status || "—",
+    request: formatDateTime(entry.request_at),
+    sample: formatDateTime(entry.sample_received_at),
+    completed: formatDateTime(entry.completed_at)
+  }));
+  const pharmacyTableRows = (selectedTracking.pharmacy_logs ?? []).map((entry, idx) => ({
+    _key: `ph-${entry.id ?? idx}`,
+    num: idx + 1,
+    bill: entry.bill_no || "—",
+    req: entry.request_no || "—",
+    issue: entry.issue_type || "—",
+    dept: entry.dept || "—",
+    request: formatDateTime(entry.request_at),
+    billTime: formatDateTime(entry.bill_at),
+    completed: formatDateTime(entry.completed_at)
+  }));
+  const treatmentTableRows = (selectedTracking.treatment_logs ?? []).map((entry, idx) => ({
+    _key: `tr-${entry.id ?? idx}`,
+    num: idx + 1,
+    start: formatDateTime(entry.start),
+    end: formatDateTime(entry.end) || "In progress"
+  }));
+
   return (
-    <section className="page patient-records-page">
+    <section className="page cc-page patient-records-page">
       <div className="page-header">
         <div>
           <h1>Patient Records</h1>
           <p className="page-subtitle">
-            Search patients from HIS, review visit history, and drill into tracked token journeys.
+            Search combines HIS admissions and LineLoom tokens (MongoDB). Open a patient to see the merged record.
           </p>
         </div>
       </div>
@@ -429,7 +501,9 @@ export const PatientRecordsPage = () => {
         <div className="patient-records-section-head">
           <div>
             <h3>Search Results</h3>
-            <p className="page-subtitle">Select a patient to load their read-only record summary.</p>
+            <p className="page-subtitle">
+              HIS = hospital visit only. LineLoom = tracked in MongoDB. HIS + LineLoom = both match.
+            </p>
           </div>
         </div>
         {!hasSearched ? (
@@ -452,6 +526,8 @@ export const PatientRecordsPage = () => {
                   <th>iReg_No</th>
                   <th>Latest visit</th>
                   <th>Department</th>
+                  <th>Source</th>
+                  <th>LineLoom</th>
                   <th>Matches</th>
                   <th>Action</th>
                 </tr>
@@ -479,6 +555,20 @@ export const PatientRecordsPage = () => {
                         </span>
                       ) : null}
                     </td>
+                    <td>
+                      <span
+                        className={`patient-records-badge ${
+                          row.latest_source === "HIS + LineLoom"
+                            ? "patient-records-badge--both"
+                            : row.tracked
+                              ? "patient-records-badge--lineloom"
+                              : ""
+                        }`}
+                      >
+                        {row.latest_source || "HIS"}
+                      </span>
+                    </td>
+                    <td>{row.tracked ? `${row.lineloom_matches ?? 0} tracked` : "—"}</td>
                     <td>{row.match_count}</td>
                     <td>
                       <button type="button" onClick={() => loadRecord(row.patient_id)}>
@@ -507,10 +597,19 @@ export const PatientRecordsPage = () => {
                   <span className="patient-chip">Patient ID {patient.patient_id}</span>
                 </div>
                 <p className="patient-meta">
-                  {patient.phone || "No phone"} | {patient.sex || "Sex unknown"} | DOB {formatDateOnly(patient.dob)}
+                  {patient.phone || "No phone"} | {patient.sex || "Sex unknown"} | DOB{" "}
+                  {formatDateOnly(patient.dob)}
                 </p>
                 <div className="patient-tags">
-                  {patient.i_reg_no ? <span>iReg_No {patient.i_reg_no}</span> : null}
+                  {patient.patient_reg_no ? (
+                    <span>Master reg {patient.patient_reg_no}</span>
+                  ) : null}
+                  {patient.i_reg_no && patient.i_reg_no !== patient.patient_reg_no ? (
+                    <span>iReg_No {patient.i_reg_no}</span>
+                  ) : null}
+                  {patient.mongodb_token_count != null ? (
+                    <span>{patient.mongodb_token_count} MongoDB token(s)</span>
+                  ) : null}
                   {summary.latest_department ? <span>{summary.latest_department}</span> : null}
                   {summary.latest_status ? (
                     summary.latest_status === "HIS ONLY" ? (
@@ -562,6 +661,92 @@ export const PatientRecordsPage = () => {
               <p>{summary.departments_visited ?? 0}</p>
             </article>
           </section>
+
+          <article className="card patient-records-mongo-card">
+            <div className="patient-records-section-head">
+              <div>
+                <h3>LineLoom patient record (MongoDB)</h3>
+                <p className="page-subtitle">
+                  Complete token and time-tracking data stored in MongoDB for this patient.
+                </p>
+              </div>
+            </div>
+            <DetailKv
+              items={[
+                { label: "Patient ID (iPat_id)", value: patient.patient_id },
+                { label: "Master reg (iReg_No)", value: patient.patient_reg_no || patient.i_reg_no },
+                { label: "Name", value: patient.name },
+                { label: "Phone", value: patient.phone },
+                { label: "Sex", value: patient.sex },
+                { label: "DOB", value: formatDateOnly(patient.dob) },
+                { label: "Latest visit", value: patient.latest_visit_id },
+                { label: "Latest department", value: patient.latest_department },
+                { label: "Latest status", value: patient.latest_status },
+                { label: "Last seen", value: formatDateTime(patient.last_seen_at) },
+                { label: "Tokens in MongoDB", value: String(patient.mongodb_token_count ?? mongoTokens.length) }
+              ]}
+            />
+            {!mongoTokens.length ? (
+              <p className="muted-inline" style={{ marginTop: 12 }}>
+                No LineLoom tokens exist in MongoDB for this patient yet. HIS-only visits appear in visit
+                history below.
+              </p>
+            ) : (
+              <div className="patient-records-data-table-wrap" style={{ marginTop: 16 }}>
+                <table className="patient-records-data-table">
+                  <thead>
+                    <tr>
+                      <th>Token</th>
+                      <th>OP / IP reg</th>
+                      <th>Master reg</th>
+                      <th>Department</th>
+                      <th>Queue #</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Workflow</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mongoTokens.map((row) => {
+                      const tt = row.time_tracking ?? {};
+                      const workflow = [
+                        tt.consult_end ? "Consult" : null,
+                        tt.pharmacy_logs?.length ? "Pharmacy" : null,
+                        tt.lab_logs?.length ? "Lab" : null,
+                        tt.billing_payments?.length ? "Billing" : null,
+                        tt.treatment_logs?.length ? "Treatment" : null
+                      ].filter(Boolean);
+                      return (
+                        <tr key={row.token_id}>
+                          <td>
+                            <strong>{row.token_id}</strong>
+                          </td>
+                          <td>{row.visit_id || "—"}</td>
+                          <td>{row.patient_reg_no || "—"}</td>
+                          <td>{row.department || "—"}</td>
+                          <td>{row.department_queue_no ?? "—"}</td>
+                          <td>{row.status || "—"}</td>
+                          <td>
+                            <small>{formatDateTime(row.created_at)}</small>
+                          </td>
+                          <td>{workflow.length ? workflow.join(", ") : "—"}</td>
+                          <td>
+                            <Link
+                              to={`/tokens/${encodeURIComponent(row.token_id)}`}
+                              className="patient-records-link"
+                            >
+                              Open token
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </article>
 
           <section className="patient-records-layout">
             <article className="card table-card patient-records-history-card">
@@ -740,30 +925,66 @@ export const PatientRecordsPage = () => {
                     />
                   </div>
 
+                  {selectedEncounter.token ? (
+                    <div className="patient-records-subsection">
+                      <h4>Token (MongoDB)</h4>
+                      <DetailKv
+                        items={[
+                          { label: "Token ID", value: selectedEncounter.token.token_id },
+                          { label: "Patient ID", value: selectedEncounter.token.patient_id },
+                          { label: "Visit / OP reg", value: selectedEncounter.token.visit_id },
+                          {
+                            label: "Master reg",
+                            value: selectedEncounter.token.patient_reg_no || "—"
+                          },
+                          { label: "Department", value: selectedEncounter.token.department },
+                          {
+                            label: "Queue #",
+                            value:
+                              selectedEncounter.token.department_queue_no != null
+                                ? String(selectedEncounter.token.department_queue_no)
+                                : "—"
+                          },
+                          { label: "Status", value: selectedEncounter.token.status },
+                          { label: "Parent token", value: selectedEncounter.token.parent_token_id || "—" },
+                          { label: "Created", value: formatDateTime(selectedEncounter.token.created_at) },
+                          { label: "Updated", value: formatDateTime(selectedEncounter.token.updated_at) }
+                        ]}
+                      />
+                    </div>
+                  ) : null}
+
                   <div className="patient-records-subsection">
                     <h4>Clinical Summary</h4>
-                    <dl className="patient-records-kv">
-                      <div>
-                        <dt>Admission</dt>
-                        <dd>{formatDateTime(selectedEncounter.admission || selectedEncounter.occurred_at)}</dd>
-                      </div>
-                      <div>
-                        <dt>Referral</dt>
-                        <dd>{selectedEncounter.referred_department || "--"}</dd>
-                      </div>
-                      <div>
-                        <dt>Post-consult plans</dt>
-                        <dd>
-                          {selectedEncounter?.time_tracking?.post_consult_plans?.length
-                            ? selectedEncounter.time_tracking.post_consult_plans.join(", ")
-                            : "--"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Billing paid</dt>
-                        <dd>{formatCurrency(selectedEncounter?.billing?.paid_amount ?? 0)}</dd>
-                      </div>
-                    </dl>
+                    <DetailKv
+                      items={[
+                        {
+                          label: "Admission",
+                          value: formatDateTime(
+                            selectedEncounter.admission || selectedEncounter.occurred_at
+                          )
+                        },
+                        { label: "Referral", value: selectedEncounter.referred_department || "—" },
+                        {
+                          label: "Post-consult plans",
+                          value: selectedTracking.post_consult_plans?.length
+                            ? selectedTracking.post_consult_plans.join(", ")
+                            : "—"
+                        },
+                        {
+                          label: "Labs ordered",
+                          value: selectedTracking.labs_ordered ? "Yes" : "No"
+                        },
+                        {
+                          label: "Billing paid",
+                          value: formatCurrency(selectedEncounter?.billing?.paid_amount ?? 0)
+                        },
+                        {
+                          label: "Billing total",
+                          value: formatCurrency(selectedTracking.billing_total_amount ?? 0)
+                        }
+                      ]}
+                    />
                     <div className="patient-records-note">
                       <strong>Consult note</strong>
                       <p>{selectedEncounter.consult_note || "No consult note captured for this encounter."}</p>
@@ -771,33 +992,36 @@ export const PatientRecordsPage = () => {
                   </div>
 
                   <div className="patient-records-subsection">
-                    <h4>Key Timestamps</h4>
-                    <dl className="patient-records-kv">
-                      <div>
-                        <dt>Waiting start</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.waiting_start)}</dd>
-                      </div>
-                      <div>
-                        <dt>Consult start</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.consult_start)}</dd>
-                      </div>
-                      <div>
-                        <dt>Consult end</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.consult_end)}</dd>
-                      </div>
-                      <div>
-                        <dt>Billing start</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.billing_start)}</dd>
-                      </div>
-                      <div>
-                        <dt>Lab start</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.lab_start)}</dd>
-                      </div>
-                      <div>
-                        <dt>Treatment start</dt>
-                        <dd>{formatDateTime(selectedEncounter?.time_tracking?.care_start)}</dd>
-                      </div>
-                    </dl>
+                    <h4>Time tracking (MongoDB)</h4>
+                    <DetailKv
+                      items={[
+                        { label: "Waiting start", value: formatDateTime(selectedTracking.waiting_start) },
+                        { label: "Consult start", value: formatDateTime(selectedTracking.consult_start) },
+                        { label: "Consult end", value: formatDateTime(selectedTracking.consult_end) },
+                        { label: "Break start", value: formatDateTime(selectedTracking.break_start) },
+                        { label: "Break end", value: formatDateTime(selectedTracking.break_end) },
+                        { label: "Billing start", value: formatDateTime(selectedTracking.billing_start) },
+                        { label: "Billing end", value: formatDateTime(selectedTracking.billing_end) },
+                        {
+                          label: "Billing elapsed",
+                          value: selectedTracking.billing_elapsed_ms
+                            ? `${Math.round(Number(selectedTracking.billing_elapsed_ms) / 1000)}s`
+                            : "—"
+                        },
+                        { label: "Pharmacy start", value: formatDateTime(selectedTracking.pharmacy_start) },
+                        { label: "Pharmacy end", value: formatDateTime(selectedTracking.pharmacy_end) },
+                        {
+                          label: "Pharmacy elapsed",
+                          value: selectedTracking.pharmacy_elapsed_ms
+                            ? `${Math.round(Number(selectedTracking.pharmacy_elapsed_ms) / 1000)}s`
+                            : "—"
+                        },
+                        { label: "Lab start", value: formatDateTime(selectedTracking.lab_start) },
+                        { label: "Lab end", value: formatDateTime(selectedTracking.lab_end) },
+                        { label: "Treatment start", value: formatDateTime(selectedTracking.care_start) },
+                        { label: "Treatment end", value: formatDateTime(selectedTracking.care_end) }
+                      ]}
+                    />
                   </div>
 
                   <div className="patient-records-subsection">
@@ -818,14 +1042,45 @@ export const PatientRecordsPage = () => {
                     )}
                   </div>
 
-                  <LogList title="Lab session" logs={selectedEncounter?.time_tracking?.lab_logs ?? []} />
-                  <LogList
-                    title="Pharmacy session"
-                    logs={selectedEncounter?.time_tracking?.pharmacy_logs ?? []}
+                  <WorkflowLogTable
+                    title="Lab sessions (MongoDB)"
+                    emptyMessage="No lab logs stored for this token."
+                    columns={[
+                      { key: "num", label: "#" },
+                      { key: "req", label: "Req" },
+                      { key: "procedure", label: "Procedure" },
+                      { key: "dept", label: "Dept" },
+                      { key: "status", label: "Status" },
+                      { key: "request", label: "Request" },
+                      { key: "sample", label: "Sample" },
+                      { key: "completed", label: "Completed" }
+                    ]}
+                    rows={labTableRows}
                   />
-                  <LogList
-                    title="Treatment session"
-                    logs={selectedEncounter?.time_tracking?.treatment_logs ?? []}
+                  <WorkflowLogTable
+                    title="Pharmacy sessions (MongoDB)"
+                    emptyMessage="No pharmacy logs stored for this token."
+                    columns={[
+                      { key: "num", label: "#" },
+                      { key: "bill", label: "Bill #" },
+                      { key: "req", label: "Req" },
+                      { key: "issue", label: "Issue" },
+                      { key: "dept", label: "Dept" },
+                      { key: "request", label: "Request" },
+                      { key: "billTime", label: "Bill time" },
+                      { key: "completed", label: "Completed" }
+                    ]}
+                    rows={pharmacyTableRows}
+                  />
+                  <WorkflowLogTable
+                    title="Treatment sessions (MongoDB)"
+                    emptyMessage="No treatment logs stored for this token."
+                    columns={[
+                      { key: "num", label: "#" },
+                      { key: "start", label: "Start" },
+                      { key: "end", label: "End" }
+                    ]}
+                    rows={treatmentTableRows}
                   />
                 </>
               ) : (

@@ -12,6 +12,8 @@ const timeTrackingSchema = new mongoose.Schema(
     post_consult_plans: { type: [String], default: [] },
     care_start: { type: Date, default: null },
     care_end: { type: Date, default: null },
+    /** Set when staff completes the visit (Complete visit). */
+    visit_completed_at: { type: Date, default: null },
     /** Auto-started at end consult when post_consult_plans include labs or pharmacy (payment path). */
     billing_start: { type: Date, default: null },
     billing_end: { type: Date, default: null },

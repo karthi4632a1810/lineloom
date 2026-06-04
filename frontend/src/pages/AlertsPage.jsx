@@ -73,7 +73,7 @@ export const AlertsPage = () => {
   };
 
   return (
-    <section className="page">
+    <section className="page cc-page">
       <header className="page-header">
         <div>
           <h1>Operational alerts</h1>

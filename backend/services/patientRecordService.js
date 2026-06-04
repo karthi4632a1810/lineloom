@@ -3,7 +3,11 @@ import { TimeTracking } from "../models/TimeTracking.js";
 import { ApiError } from "../utils/apiError.js";
 import { calculateTimeMetrics } from "../utils/timeMetrics.js";
 import { buildTatMetrics } from "./dashboardService.js";
-import { fetchPatientDemographics, fetchPatientVisitHistory } from "./hisService.js";
+import {
+  fetchPatientDemographics,
+  fetchPatientVisitHistory,
+  searchHisPatients
+} from "./hisService.js";
 import { detectVisitStage } from "./revertMilestones.js";
 
 const toIso = (value = null) => {
@@ -24,7 +28,7 @@ const toNumber = (value = 0) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
-const normalizeLogs = (logs = []) =>
+const normalizeTreatmentLogs = (logs = []) =>
   (Array.isArray(logs) ? logs : [])
     .map((entry, index) => ({
       id: `${index}`,
@@ -32,6 +36,34 @@ const normalizeLogs = (logs = []) =>
       end: toIso(entry?.end)
     }))
     .filter((entry) => entry.start);
+
+const normalizeLabLogs = (logs = []) =>
+  (Array.isArray(logs) ? logs : []).map((entry, index) => ({
+    id: `${index}`,
+    request_no: String(entry?.request_no ?? "").trim(),
+    procedure: String(entry?.procedure ?? "").trim(),
+    dept: String(entry?.dept ?? "").trim(),
+    status: String(entry?.status ?? "").trim(),
+    request_at: toIso(entry?.request_at),
+    sample_received_at: toIso(entry?.sample_received_at),
+    completed_at: toIso(entry?.completed_at),
+    start: toIso(entry?.start),
+    end: toIso(entry?.end)
+  }));
+
+const normalizePharmacyLogs = (logs = []) =>
+  (Array.isArray(logs) ? logs : []).map((entry, index) => ({
+    id: `${index}`,
+    bill_no: String(entry?.bill_no ?? "").trim(),
+    request_no: String(entry?.request_no ?? "").trim(),
+    issue_type: String(entry?.issue_type ?? "").trim(),
+    dept: String(entry?.dept ?? "").trim(),
+    request_at: toIso(entry?.request_at),
+    bill_at: toIso(entry?.bill_at),
+    completed_at: toIso(entry?.completed_at),
+    start: toIso(entry?.start),
+    end: toIso(entry?.end)
+  }));
 
 const normalizePayments = (payments = []) =>
   (Array.isArray(payments) ? payments : [])
@@ -122,18 +154,35 @@ const buildTrackingPayload = (tracking = {}) => {
       : [],
     lab_start: toIso(tracking?.lab_start),
     lab_end: toIso(tracking?.lab_end),
-    lab_logs: normalizeLogs(tracking?.lab_logs),
+    lab_logs: normalizeLabLogs(tracking?.lab_logs),
     pharmacy_start: toIso(tracking?.pharmacy_start),
     pharmacy_end: toIso(tracking?.pharmacy_end),
     pharmacy_elapsed_ms: toNumber(tracking?.pharmacy_elapsed_ms),
-    pharmacy_logs: normalizeLogs(tracking?.pharmacy_logs),
-    treatment_logs: normalizeLogs(tracking?.treatment_logs),
+    pharmacy_logs: normalizePharmacyLogs(tracking?.pharmacy_logs),
+    treatment_logs: normalizeTreatmentLogs(tracking?.treatment_logs),
     consult_note: String(tracking?.consult_note ?? "").trim(),
     referred_department: String(tracking?.referred_department ?? "").trim(),
     break_start: toIso(tracking?.break_start),
-    break_end: toIso(tracking?.break_end)
+    break_end: toIso(tracking?.break_end),
+    visit_completed_at: toIso(tracking?.visit_completed_at)
   };
 };
+
+const buildTokenPayload = (token = {}) => ({
+  token_id: String(token?.token_id ?? "").trim(),
+  patient_id: String(token?.patient_id ?? "").trim(),
+  visit_id: String(token?.visit_id ?? "").trim(),
+  patient_reg_no: String(token?.patient_reg_no ?? "").trim(),
+  patient_name: String(token?.patient_name ?? "").trim(),
+  patient_phone: String(token?.patient_phone ?? "").trim(),
+  department: String(token?.department ?? "").trim(),
+  department_queue_no:
+    token?.department_queue_no == null ? null : Number(token.department_queue_no),
+  parent_token_id: String(token?.parent_token_id ?? "").trim() || null,
+  status: toDisplayStatus(token?.status),
+  created_at: toIso(token?.created_at),
+  updated_at: toIso(token?.updated_at)
+});
 
 const buildTrackedEncounter = (token = {}, tracking = {}, hisVisit = null, fallbackDemo = {}) => {
   const status = toDisplayStatus(token?.status);
@@ -155,6 +204,7 @@ const buildTrackedEncounter = (token = {}, tracking = {}, hisVisit = null, fallb
   return {
     encounter_key: `token-${token.token_id}`,
     source: "tracked",
+    token: buildTokenPayload(token),
     token_id: String(token?.token_id ?? ""),
     parent_token_id: pickLatestValue(token?.parent_token_id),
     patient_id: String(token?.patient_id ?? "").trim(),
@@ -370,19 +420,39 @@ export const getPatientRecord = async (patientId = "") => {
   const departmentsVisited = [
     ...new Set(encounters.map((entry) => String(entry?.department ?? "").trim()).filter(Boolean))
   ];
+  const mongoTokens = tokens.map((token) => {
+    const tokenId = String(token?.token_id ?? "").trim();
+    return {
+      ...buildTokenPayload(token),
+      time_tracking: buildTrackingPayload(trackingByTokenId[tokenId] ?? {})
+    };
+  });
 
   return {
     patient: {
       patient_id: pickLatestValue(latest?.patient_id, id),
       name: pickLatestValue(latest?.patient_name, demo?.name),
       phone: pickLatestValue(latest?.patient_phone, demo?.phone),
-      dob: pickLatestValue(latest?.dob),
-      sex: pickLatestValue(latest?.sex),
-      i_reg_no: pickLatestValue(latest?.i_reg_no),
+      dob: pickLatestValue(latest?.dob, demo?.dob),
+      sex: pickLatestValue(latest?.sex, demo?.sex),
+      i_reg_no: pickLatestValue(
+        latest?.i_reg_no,
+        demo?.i_reg_no,
+        ...tokens.map((row) => row?.patient_reg_no)
+      ),
+      patient_reg_no: pickLatestValue(
+        ...tokens.map((row) => row?.patient_reg_no),
+        latest?.i_reg_no,
+        demo?.i_reg_no
+      ),
       last_seen_at: pickLatestValue(latest?.occurred_at, latest?.admission),
       latest_visit_id: pickLatestValue(latest?.visit_id),
       latest_department: pickLatestValue(latest?.department),
-      latest_status: pickLatestValue(latest?.status)
+      latest_status: pickLatestValue(latest?.status),
+      mongodb_token_count: tokens.length
+    },
+    mongodb: {
+      tokens: mongoTokens
     },
     summary: {
       total_visits: allVisitIds.size,
@@ -398,4 +468,139 @@ export const getPatientRecord = async (patientId = "") => {
     },
     encounters
   };
+};
+
+const escapeRegex = (value = "") => String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const visitRowKey = (patientId = "", visitId = "") =>
+  `${String(patientId ?? "").trim()}:${String(visitId ?? "").trim()}`;
+
+const mapTokenToSearchRow = (token = {}) => {
+  const createdAt = toIso(token?.created_at);
+  return {
+    patient_id: String(token?.patient_id ?? "").trim(),
+    visit_id: String(token?.visit_id ?? "").trim(),
+    i_reg_no: String(token?.patient_reg_no ?? "").trim(),
+    c_pat_name: String(token?.patient_name ?? "").trim(),
+    name: String(token?.patient_name ?? "").trim(),
+    d_dob: "",
+    c_sex: "",
+    dept_name: String(token?.department ?? "").trim(),
+    department: String(token?.department ?? "").trim(),
+    admission: createdAt,
+    visit_datetime: createdAt,
+    type: "LineLoom",
+    token_id: String(token?.token_id ?? "").trim(),
+    token_status: toDisplayStatus(token?.status),
+    tracked: true,
+    source: "lineloom"
+  };
+};
+
+/** Search tokens collection (MongoDB) using the same filters as HIS patient search. */
+export const searchLineloomTokens = async (filters = {}) => {
+  const patientId = String(filters.patient_id ?? "").trim();
+  const name = String(filters.name ?? "").trim();
+  const regNo = String(filters.reg_no ?? "").trim();
+  const dateFrom = String(filters.date_from ?? "").trim();
+  const dateTo = String(filters.date_to ?? "").trim();
+
+  if (!patientId && !name && !regNo && !dateFrom && !dateTo) {
+    return [];
+  }
+
+  const clauses = [];
+
+  if (patientId) {
+    const variants = buildPatientIdVariants(patientId);
+    const idPattern = escapeRegex(patientId);
+    clauses.push({
+      $or: [
+        { patient_id: { $in: variants } },
+        { visit_id: { $regex: idPattern, $options: "i" } },
+        { patient_reg_no: { $regex: idPattern, $options: "i" } },
+        { token_id: { $regex: idPattern, $options: "i" } }
+      ]
+    });
+  }
+  if (name) {
+    clauses.push({ patient_name: { $regex: escapeRegex(name), $options: "i" } });
+  }
+  if (regNo) {
+    const regPattern = escapeRegex(regNo);
+    clauses.push({
+      $or: [
+        { visit_id: { $regex: regPattern, $options: "i" } },
+        { patient_reg_no: { $regex: regPattern, $options: "i" } }
+      ]
+    });
+  }
+  if (dateFrom || dateTo) {
+    const range = {};
+    if (dateFrom) {
+      range.$gte = new Date(`${dateFrom}T00:00:00.000`);
+    }
+    if (dateTo) {
+      range.$lte = new Date(`${dateTo}T23:59:59.999`);
+    }
+    clauses.push({ created_at: range });
+  }
+
+  const query = clauses.length ? { $and: clauses } : {};
+  const tokens = await Token.find(query).sort({ created_at: -1 }).limit(50).lean();
+  return tokens.map(mapTokenToSearchRow);
+};
+
+/**
+ * Merges HIS admissions with LineLoom tokens so Patient Records search shows both sources.
+ */
+export const searchPatientRecords = async (filters = {}) => {
+  const hasAnyFilter = Object.values(filters).some((value) => String(value ?? "").trim());
+  if (!hasAnyFilter) {
+    return [];
+  }
+
+  const [hisRows, lineloomRows] = await Promise.all([
+    searchHisPatients(filters).catch(() => []),
+    searchLineloomTokens(filters)
+  ]);
+
+  const merged = new Map();
+
+  for (const row of hisRows) {
+    const key = visitRowKey(row.patient_id, row.visit_id);
+    merged.set(key, {
+      ...row,
+      token_id: "",
+      token_status: "",
+      tracked: false,
+      source: "his"
+    });
+  }
+
+  for (const row of lineloomRows) {
+    const key = visitRowKey(row.patient_id, row.visit_id);
+    const existing = merged.get(key);
+    if (existing) {
+      merged.set(key, {
+        ...existing,
+        token_id: row.token_id || existing.token_id,
+        token_status: row.token_status || existing.token_status,
+        tracked: true,
+        source: "both",
+        dept_name: pickLatestValue(existing.dept_name, row.dept_name),
+        department: pickLatestValue(existing.department, row.department),
+        c_pat_name: pickLatestValue(existing.c_pat_name, row.c_pat_name),
+        i_reg_no: pickLatestValue(existing.i_reg_no, row.i_reg_no)
+      });
+      continue;
+    }
+    merged.set(key, { ...row });
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    const leftMs = new Date(left?.admission ?? left?.visit_datetime ?? 0).getTime();
+    const rightMs = new Date(right?.admission ?? right?.visit_datetime ?? 0).getTime();
+    return (Number.isFinite(rightMs) ? rightMs : 0) - (Number.isFinite(leftMs) ? leftMs : 0);
+  });
 };

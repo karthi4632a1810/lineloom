@@ -13,23 +13,17 @@ import {
   startConsultRequest,
   revertTokenRequest
 } from "../services/tokenService";
+import { ClinicalTokenDetailLayout } from "../components/clinical/ClinicalTokenDetailLayout.jsx";
 import { buildJourneyStepsFromTracking, mapJourneyStepForDisplay } from "../utils/journeyTimeline.js";
+import { overallVisitSeconds, resolveVisitCompletedAt } from "../utils/visitCompletion.js";
 import { resolveLabTimes } from "../utils/labTimes";
 import { resolvePharmacyTimes } from "../utils/pharmacyTimes";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
 import { postConsultLabel } from "../constants/postConsultOptions";
 import { canRevertVisit, getVisitPhaseChipClass, getVisitPhaseLabel } from "../utils/revertAnchors";
+import { formatDateTimeDisplay } from "../utils/dateTimeDisplay.js";
 
-const formatDateTime = (value = null) => {
-  if (!value) {
-    return "--";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-  return date.toLocaleString();
-};
+const formatDateTime = (value = null) => formatDateTimeDisplay(value);
 
 const toSecondsFromMinutes = (value = null) => {
   if (value == null) {
@@ -324,7 +318,7 @@ export const TokenDetailPage = () => {
   }, [resolvedTokenId, refreshTokenViews]);
 
   useEffect(() => {
-    if (isLoading || !data?.token?.visit_id || data.token.status === "COMPLETED") {
+    if (isLoading || !data?.token?.visit_id) {
       return undefined;
     }
     const tr = data.tracking ?? {};
@@ -336,12 +330,18 @@ export const TokenDetailPage = () => {
       (Number(tr.billing_elapsed_ms ?? 0) || 0) > 0;
     const { completedAt: labCompletedAt } = resolveLabTimes(tr);
     const { completedAt: pharmacyCompletedAt } = resolvePharmacyTimes(tr);
+    const postPlans = Array.isArray(tr.post_consult_plans) ? tr.post_consult_plans : [];
     const inLabPath =
       Boolean(tr.consult_end) &&
-      (Boolean(tr.labs_ordered) || tr.lab_start || tr.lab_end || (tr.lab_logs ?? []).length > 0);
+      (Boolean(tr.labs_ordered) ||
+        tr.lab_start ||
+        tr.lab_end ||
+        (tr.lab_logs ?? []).length > 0 ||
+        postPlans.map((p) => String(p).toLowerCase()).includes("labs"));
     const needsLabRefresh = inLabPath && !labCompletedAt;
     const needsPharmacyRefresh = Boolean(tr.consult_end) && !pharmacyCompletedAt;
-    if (hasBilling && !needsLabRefresh && !needsPharmacyRefresh) {
+    const needsBillingRefresh = Boolean(tr.consult_end) && !hasBilling;
+    if (!needsLabRefresh && !needsPharmacyRefresh && !needsBillingRefresh) {
       return undefined;
     }
     const pollMs = needsLabRefresh || needsPharmacyRefresh ? 15_000 : 30_000;
@@ -377,7 +377,22 @@ export const TokenDetailPage = () => {
   }, [data, nowMs]);
 
   if (isLoading && !data) {
-    return <section className="page">Loading token timeline...</section>;
+    return (
+      <div className="cc-detail">
+        <div className="cc-patient-header">
+          <div className="cc-skeleton" style={{ width: 64, height: 64, borderRadius: 14 }} />
+          <div style={{ flex: 1 }}>
+            <div className="cc-skeleton" style={{ height: 28, width: "40%", marginBottom: 8 }} />
+            <div className="cc-skeleton" style={{ height: 14, width: "60%" }} />
+          </div>
+        </div>
+        <div className="cc-kpi-row">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="cc-skeleton" style={{ height: 100 }} />
+          ))}
+        </div>
+      </div>
+    );
   }
   if (error) {
     const isNotFound = String(error ?? "")
@@ -412,14 +427,21 @@ export const TokenDetailPage = () => {
   const patient = data.patient ?? {};
   const waitingSeconds = getDetailTatSeconds(tracking, token.status, metrics, "waiting", nowMs);
   const consultSeconds = getDetailTatSeconds(tracking, token.status, metrics, "consult", nowMs);
-  const billingSeconds = getDetailTatSeconds(tracking, token.status, metrics, "billing", nowMs);
   const labWaitSeconds = getDetailTatSeconds(tracking, token.status, metrics, "lab_wait", nowMs);
   const labTestSeconds = getDetailTatSeconds(tracking, token.status, metrics, "lab_test", nowMs);
   const treatmentSeconds = getDetailTatSeconds(tracking, token.status, metrics, "treatment", nowMs);
-  const overallSeconds = ["waiting", "consult", "lab_wait", "lab_test", "treatment"]
-    .map((k) => getDetailTatSeconds(tracking, token.status, metrics, k, nowMs))
-    .filter((v) => v != null)
-    .reduce((sum, v) => sum + v, 0);
+  const overallSeconds =
+    token.status === "COMPLETED"
+      ? (overallVisitSeconds(tracking, token) ??
+        ["waiting", "consult", "lab_wait", "lab_test", "treatment"]
+          .map((k) => getDetailTatSeconds(tracking, token.status, metrics, k, nowMs))
+          .filter((v) => v != null)
+          .reduce((sum, v) => sum + v, 0))
+      : ["waiting", "consult", "lab_wait", "lab_test", "treatment"]
+          .map((k) => getDetailTatSeconds(tracking, token.status, metrics, k, nowMs))
+          .filter((v) => v != null)
+          .reduce((sum, v) => sum + v, 0);
+  const visitCompletedAtLabel = formatDateTime(resolveVisitCompletedAt(tracking, token));
   const consultStartedAt = formatDateTime(tracking.consult_start);
   const consultDurationLabel = !tracking.consult_start
     ? "--"
@@ -457,14 +479,14 @@ export const TokenDetailPage = () => {
     tracking.care_start,
     tracking.care_end
   );
-  const billingDurationLabel =
-    billingSeconds == null
-      ? "--"
-      : tracking.billing_start && !tracking.billing_end
-        ? `${formatSeconds(billingSeconds)} elapsed`
-        : formatSeconds(billingSeconds);
+  const postConsultPlans = Array.isArray(tracking.post_consult_plans)
+    ? tracking.post_consult_plans
+    : [];
   const inLabPath =
-    Boolean(tracking.labs_ordered) || Boolean(tracking.lab_start) || Boolean(tracking.lab_end);
+    Boolean(tracking.labs_ordered) ||
+    Boolean(tracking.lab_start) ||
+    Boolean(tracking.lab_end) ||
+    postConsultPlans.map((p) => String(p).toLowerCase()).includes("labs");
   const labWaitDurationLabel = !tracking.consult_end || !inLabPath
     ? "--"
     : !tracking.lab_start
@@ -477,17 +499,6 @@ export const TokenDetailPage = () => {
       : formatSeconds(labTestSeconds);
 
   const billingPayments = Array.isArray(tracking.billing_payments) ? tracking.billing_payments : [];
-  const hasBillingStats =
-    billingSeconds != null ||
-    Boolean(tracking.billing_start) ||
-    Boolean(tracking.billing_end) ||
-    (Number(tracking.billing_elapsed_ms ?? 0) || 0) > 0 ||
-    billingPayments.length > 0;
-  const billingClockLabel = tracking.billing_start
-    ? formatDateTime(tracking.billing_start)
-    : tracking.billing_end
-      ? formatDateTime(tracking.billing_end)
-      : "--";
   const postConsultPlansSaved = Array.isArray(tracking.post_consult_plans)
     ? tracking.post_consult_plans
     : [];
@@ -623,82 +634,63 @@ export const TokenDetailPage = () => {
     }
   };
 
+  const hisRegHint =
+    token.patient_reg_no && token.patient_reg_no !== token.visit_id
+      ? `Patient reg ${token.patient_reg_no} · OP ${token.visit_id}`
+      : `OP reg ${token.visit_id || "—"}`;
+
   return (
-    <section className="page detail-page">
-      <header className="detail-header">
-        <div className="patient-hero">
-          <div className="patient-avatar">
-            {(patient?.name ?? token.patient_id ?? "P").slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <div className="patient-title-row">
-              <h2>{patient?.name ?? `Patient ${token.patient_id}`}</h2>
-              <span className="patient-chip">{token.patient_id}</span>
-            </div>
-            <p className="patient-meta">
-              {token.department} • Queue #{token.department_queue_no ?? "—"} • OP {token.visit_id}
-              {token.patient_reg_no && token.patient_reg_no !== token.visit_id
-                ? ` • Patient reg ${token.patient_reg_no}`
-                : ""}
-            </p>
-            <div className="patient-tags">
-              <span className={`status-chip ${visitPhaseChipClass}`} title={`API status: ${token.status}`}>
-                {visitPhaseLabel}
-              </span>
-              <span>{patient?.phone ? `Phone ${patient.phone}` : "Phone unavailable"}</span>
-            </div>
-            {postConsultPlansSaved.length ? (
-              <div className="post-consult-chips" aria-label="Selected after consult">
-                {postConsultPlansSaved.map((id) => (
-                  <span key={id} className="post-consult-chip">
-                    {postConsultLabel(id)}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="detail-actions">
-          <button
-            type="button"
-            onClick={() => runTokenAction("start_consult")}
-            disabled={isActing || token.status !== "WAITING"}
-          >
-            Start Consult
-          </button>
-          <button
-            type="button"
-            onClick={() => runTokenAction("end_consult")}
-            disabled={
-              isActing ||
-              token.status !== "CONSULTING" ||
-              Boolean(tracking.consult_end)
-            }
-            title="End consultation"
-          >
-            End Consult
-          </button>
-          <button
-            type="button"
-            className="btn-complete-visit"
-            onClick={() => runTokenAction("complete_visit")}
-            disabled={isActing || token.status === "COMPLETED"}
-            title="Complete this token now"
-          >
-            Complete visit
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={openRevertModal}
-            disabled={isActing || token.status === "WAITING" || !revertAllowed}
-            title="Revert to an earlier journey step"
-          >
-            Revert
-          </button>
-        </div>
-      </header>
-      {actionError ? <p className="error-text">{actionError}</p> : null}
+    <>
+      <ClinicalTokenDetailLayout
+        token={token}
+        patient={patient}
+        tracking={tracking}
+        visitPhaseLabel={visitPhaseLabel}
+        visitPhaseChipClass={visitPhaseChipClass}
+        postConsultPlansSaved={postConsultPlansSaved}
+        postConsultLabel={postConsultLabel}
+        isActing={isActing}
+        actionError={actionError}
+        onStartConsult={() => runTokenAction("start_consult")}
+        onEndConsult={() => runTokenAction("end_consult")}
+        onCompleteVisit={() => runTokenAction("complete_visit")}
+        onRevert={openRevertModal}
+        revertAllowed={revertAllowed}
+        onStartTreatment={() => runTokenAction("start_treatment")}
+        onEndTreatment={() => runTokenAction("end_treatment")}
+        canStartTreatment={
+          !isActing &&
+          token.status === "CONSULTING" &&
+          Boolean(tracking.consult_end) &&
+          token.status !== "COMPLETED" &&
+          token.status !== "IN_TREATMENT"
+        }
+        canEndTreatment={!isActing && token.status === "IN_TREATMENT"}
+        waitingSeconds={waitingSeconds}
+        consultSeconds={consultSeconds}
+        treatmentSeconds={treatmentSeconds}
+        overallSeconds={overallSeconds}
+        visitCompletedAtLabel={visitCompletedAtLabel}
+        consultStartedAt={consultStartedAt}
+        consultDurationLabel={consultDurationLabel}
+        treatmentStartedAt={treatmentStartedAt}
+        treatmentDurationLabel={treatmentDurationLabel}
+        pharmacyTotalSeconds={pharmacyTotalSeconds}
+        pharmacyHisTimes={pharmacyHisTimes}
+        pharmacyLogs={pharmacyLogs}
+        labHisTimes={labHisTimes}
+        labLogs={labLogs}
+        labTestSeconds={labTestSeconds}
+        inLabPath={inLabPath}
+        treatmentTotalSeconds={treatmentTotalSeconds}
+        billingPayments={billingPayments}
+        treatmentLogs={Array.isArray(tracking.treatment_logs) ? tracking.treatment_logs : []}
+        treatmentLabelPayments={treatmentLabelPayments}
+        patientJourneySteps={patientJourneySteps}
+        formatDateTime={formatDateTime}
+        formatSeconds={formatSeconds}
+        hisRegHint={hisRegHint}
+      />
 
       {showConsultModal ? (
         <section className="modal-overlay">
@@ -798,404 +790,6 @@ export const TokenDetailPage = () => {
         onConfirm={executeRevert}
         isSubmitting={isActing}
       />
-
-      <div className="detail-grid">
-        <div className="detail-main">
-          <section className="detail-stats">
-            <article className="card">
-              <p>Total Wait Time</p>
-              <div className="detail-stat-metric">{formatSeconds(waitingSeconds)}</div>
-            </article>
-            <article className="card">
-              <p>Consulting Since</p>
-              <div className="detail-stat-datetime">{consultStartedAt}</div>
-              <small>{consultDurationLabel}</small>
-            </article>
-            {hasBillingStats ? (
-              <article className="card">
-                <p>Billing time</p>
-                <div className="detail-stat-datetime">{billingClockLabel}</div>
-                <small>{billingDurationLabel}</small>
-              </article>
-            ) : null}
-            {tracking.consult_end && inLabPath ? (
-              <>
-                <article className="card">
-                  <p>Lab waiting</p>
-                  <div className="detail-stat-datetime">{formatDateTime(tracking.consult_end)}</div>
-                  <small>{labWaitDurationLabel}</small>
-                </article>
-                <article className="card">
-                  <p>Lab testing</p>
-                  <div className="detail-stat-datetime">
-                    {tracking.lab_start ? formatDateTime(tracking.lab_start) : "--"}
-                  </div>
-                  <small>{labTestDurationLabel}</small>
-                </article>
-              </>
-            ) : null}
-            <article className="card">
-              <p>Treatment Since</p>
-              <div className="detail-stat-datetime">{treatmentStartedAt}</div>
-              <small>{treatmentDurationLabel}</small>
-            </article>
-            <article className="card">
-              <p>Estimated TAT</p>
-              <div className="detail-stat-metric">{formatSeconds(overallSeconds)}</div>
-            </article>
-          </section>
-
-          <section className="card">
-            <h3>Post-Consult Workflow Slots</h3>
-            <div className="workflow-slot-grid">
-              <div className="workflow-slot-card">
-                <div className="workflow-slot-head">
-                  <p className="workflow-slot-title">Pharmacy (HIS)</p>
-                  <span className="workflow-slot-chip">
-                    Elapsed: {formatSeconds(pharmacyTotalSeconds)}
-                  </span>
-                </div>
-                <p className="workflow-slot-time muted-inline">
-                  Auto from KMCH_Pharmacy ·{" "}
-                  {token.patient_reg_no && token.patient_reg_no !== token.visit_id
-                    ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
-                    : `OP reg ${token.visit_id || "—"}`}
-                </p>
-                <p className="workflow-slot-time">
-                  Request: {formatDateTime(pharmacyHisTimes.requestAt)}
-                </p>
-                <p className="workflow-slot-time">
-                  Bill: {formatDateTime(pharmacyHisTimes.billAt)}
-                </p>
-                <p className="workflow-slot-time">
-                  Completed:{" "}
-                  {pharmacyHisTimes.completedAt
-                    ? formatDateTime(pharmacyHisTimes.completedAt)
-                    : pharmacyHisTimes.billAt || pharmacyHisTimes.requestAt
-                      ? "In progress"
-                      : "--"}
-                </p>
-              </div>
-              <div className="workflow-slot-card">
-                <div className="workflow-slot-head">
-                  <p className="workflow-slot-title">Lab (HIS)</p>
-                  <span className="workflow-slot-chip">
-                    Test: {formatSeconds(labTestSeconds)}
-                  </span>
-                </div>
-                <p className="workflow-slot-time muted-inline">
-                  Auto from KMCH_Lab ·{" "}
-                  {token.patient_reg_no && token.patient_reg_no !== token.visit_id
-                    ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
-                    : `OP reg ${token.visit_id || "—"}`}
-                </p>
-                <p className="workflow-slot-time">
-                  Request: {formatDateTime(labHisTimes.requestAt)}
-                </p>
-                <p className="workflow-slot-time">
-                  Sample received: {formatDateTime(labHisTimes.sampleAt)}
-                </p>
-                <p className="workflow-slot-time">
-                  Completed:{" "}
-                  {labHisTimes.completedAt
-                    ? formatDateTime(labHisTimes.completedAt)
-                    : labHisTimes.sampleAt || labHisTimes.requestAt
-                      ? "In progress"
-                      : "--"}
-                </p>
-              </div>
-              <div className="workflow-slot-card">
-                <div className="workflow-slot-head">
-                  <p className="workflow-slot-title">Treatment</p>
-                  <span className="workflow-slot-chip">
-                    Elapsed: {formatSeconds(treatmentTotalSeconds)}
-                  </span>
-                </div>
-                <p className="workflow-slot-time">Start: {formatDateTime(tracking.care_start)}</p>
-                <p className="workflow-slot-time">End: {formatDateTime(tracking.care_end)}</p>
-                <div className="workflow-slot-actions">
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("start_treatment")}
-                    disabled={
-                      isActing ||
-                      token.status !== "CONSULTING" ||
-                      !tracking.consult_end ||
-                      token.status === "COMPLETED" ||
-                      token.status === "IN_TREATMENT"
-                    }
-                  >
-                    Start
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runTokenAction("end_treatment")}
-                    disabled={isActing || token.status !== "IN_TREATMENT"}
-                  >
-                    End
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="card">
-            <h3>Workflow Time Log</h3>
-            <div className="workflow-log-sections">
-              <div className="table-card">
-                <h4>Pharmacy (HIS)</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Bill</th>
-                      <th>Request time</th>
-                      <th>Bill time</th>
-                      <th>Completed</th>
-                      <th>Issue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pharmacyLogs.length ? (
-                      [...pharmacyLogs].reverse().map((entry, idx) => (
-                        <tr key={`pharmacy-time-log-${idx}-${entry?.bill_no ?? ""}`}>
-                          <td>{idx + 1}</td>
-                          <td>{String(entry?.bill_no ?? "").trim() || "—"}</td>
-                          <td>{formatDateTime(entry?.request_at)}</td>
-                          <td>{formatDateTime(entry?.bill_at ?? entry?.start)}</td>
-                          <td>{formatDateTime(entry?.completed_at ?? entry?.end)}</td>
-                          <td>{String(entry?.issue_type ?? "").trim() || "—"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6}>
-                          {tracking.consult_end
-                            ? "Waiting for pharmacy sale in HIS…"
-                            : "End consultation to load pharmacy from HIS."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="table-card">
-                <h4>Lab (HIS)</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Req</th>
-                      <th>Request time</th>
-                      <th>Sample received</th>
-                      <th>Completed</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {labLogs.length ? (
-                      [...labLogs].reverse().map((entry, idx) => (
-                        <tr key={`lab-time-log-${idx}-${entry?.request_no ?? ""}`}>
-                          <td>{idx + 1}</td>
-                          <td>{String(entry?.request_no ?? "").trim() || "—"}</td>
-                          <td>{formatDateTime(entry?.request_at)}</td>
-                          <td>{formatDateTime(entry?.sample_received_at ?? entry?.start)}</td>
-                          <td>{formatDateTime(entry?.completed_at ?? entry?.end)}</td>
-                          <td>{String(entry?.status ?? "").trim() || "—"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6}>
-                          {tracking.consult_end
-                            ? "Waiting for lab orders in HIS…"
-                            : "End consultation to load lab from HIS."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="table-card">
-                <h4>Treatment Logs</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Start time</th>
-                      <th>End time</th>
-                      <th>Bill time (HIS)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(Array.isArray(tracking.treatment_logs) ? tracking.treatment_logs : []).length ? (
-                      [...(tracking.treatment_logs ?? [])].reverse().map((entry, idx) => {
-                        const chronoIndex = (tracking.treatment_logs ?? []).length - 1 - idx;
-                        const billed = treatmentLabelPayments[chronoIndex]?.paid_at ?? null;
-                        const elapsedEnd = billed ?? tracking.billing_end ?? null;
-                        return (
-                          <tr key={`treatment-time-log-${idx}`}>
-                            <td>{idx + 1}</td>
-                            <td>{formatDateTime(entry?.start)}</td>
-                            <td>{formatDateTime(entry?.end)}</td>
-                            <td>{formatDateTime(elapsedEnd)}</td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={4}>No treatment logs yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <aside className="detail-side">
-          <section className="card">
-            <h3>Billing (HIS)</h3>
-            <p className="muted-inline">
-              Loaded automatically from KMCH_Billing for{" "}
-              {token.patient_reg_no && token.patient_reg_no !== token.visit_id
-                ? `patient reg ${token.patient_reg_no} (OP ${token.visit_id})`
-                : `OP reg ${token.visit_id || "—"}`}
-              .
-            </p>
-            <div className="vitals-grid" style={{ marginBottom: 12 }}>
-              <div className="vital-card">
-                <p>Billing time</p>
-                <h4>{hasBillingStats ? billingDurationLabel : "—"}</h4>
-              </div>
-              <div className="vital-card">
-                <p>Bill posted (HIS)</p>
-                <h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                  {tracking.billing_end ? formatDateTime(tracking.billing_end) : "—"}
-                </h4>
-              </div>
-            </div>
-            {!hasBillingStats ? (
-              <p className="muted-inline">Waiting for bill in HIS…</p>
-            ) : billingPayments.length > 1 ? (
-              <ul className="billing-his-times">
-                {billingPayments.map((payment, idx) => (
-                  <li key={`pay-${idx}-${payment?.paid_at ?? ""}`}>
-                    {formatDateTime(payment?.paid_at)}
-                    {String(payment?.note ?? "").trim()
-                      ? ` · ${String(payment.note).trim()}`
-                      : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-          <section className="card">
-            <h3>Patient Journey</h3>
-            <div className="journey-list journey-graph">
-              {patientJourneySteps.length === 0 ? (
-                <p className="muted-inline">No journey steps yet.</p>
-              ) : (
-                patientJourneySteps.map((step, index, allSteps) => {
-                  const labelLower = String(step?.label ?? "").toLowerCase();
-                  const resolvedKind = String(step?.kind ?? "").toLowerCase();
-                  const kindKey =
-                    resolvedKind ||
-                    (labelLower.includes("billing")
-                      ? "billing"
-                      : labelLower.includes("pharmacy")
-                        ? "pharmacy"
-                        : labelLower.includes("lab")
-                          ? "lab"
-                          : labelLower.includes("treatment")
-                            ? "treatment"
-                            : "core");
-                  const isBillingStep = kindKey === "billing";
-                  const isPharmacyStep = kindKey === "pharmacy" || kindKey === "pharmacy_queue";
-                  const billingItems = isBillingStep
-                    ? [...billingPayments]
-                        .map((p, idx) => ({
-                          id: `bill-${idx}-${p?.paid_at ?? ""}`,
-                          idx: idx + 1,
-                          paidAt: p?.paid_at,
-                          note: String(p?.note ?? "").trim()
-                        }))
-                        .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime())
-                    : [];
-                  const pharmacyItems = isPharmacyStep
-                    ? pharmacyLogs.map((entry, idx) => ({
-                        id: `pharm-${idx}-${entry?.bill_no ?? ""}`,
-                        billNo: String(entry?.bill_no ?? "").trim() || `#${idx + 1}`,
-                        billAt: entry?.bill_at ?? entry?.start,
-                        completedAt: entry?.completed_at ?? entry?.end,
-                        issueType: String(entry?.issue_type ?? "").trim()
-                      }))
-                    : [];
-                  const timePrimary =
-                    isBillingStep && !billingItems.length && !tracking.billing_end
-                      ? "Awaiting bill in HIS"
-                      : isPharmacyStep &&
-                          !pharmacyItems.length &&
-                          !pharmacyHisTimes.billAt
-                        ? "Awaiting pharmacy in HIS"
-                        : step.timePrimary ?? step.time;
-                  return (
-                    <div
-                      key={`${step.label}-${index}`}
-                      className={`journey-step ${step.active ? "active" : ""} journey-kind-${kindKey} ${
-                        index === allSteps.length - 1 ? "journey-step-last" : ""
-                      }`}
-                    >
-                      <span className={`dot ${step.done ? "done" : ""}`}>
-                        {step.done ? "✓" : ""}
-                      </span>
-                      <div className="journey-step-body">
-                        <strong>{step.label}</strong>
-                        <p className="journey-step-time">{timePrimary}</p>
-                        {step.timeSecondary ? (
-                          <p className="journey-step-sub">{step.timeSecondary}</p>
-                        ) : null}
-                        {isBillingStep && billingItems.length ? (
-                          <div className="journey-children">
-                            {billingItems.map((item) => (
-                              <p key={item.id} className="journey-child-row">
-                                {item.note || `Payment ${item.idx}`} · {formatDateTime(item.paidAt)}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                        {isPharmacyStep && pharmacyItems.length > 1 ? (
-                          <div className="journey-children">
-                            {pharmacyItems.map((item) => (
-                              <p key={item.id} className="journey-child-row">
-                                Bill {item.billNo}
-                                {item.billAt ? ` · ${formatDateTime(item.billAt)}` : ""}
-                                {item.completedAt ? ` → ${formatDateTime(item.completedAt)}` : ""}
-                                {item.issueType ? ` (${item.issueType})` : ""}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-          <section className="card">
-            <h3>Urgent Actions</h3>
-            <div className="urgent-list">
-              <button type="button">Order Lab Tests</button>
-              <button type="button">Prescribe E-Rx</button>
-              <button type="button">Rapid Response Team</button>
-            </div>
-          </section>
-        </aside>
-      </div>
-    </section>
+    </>
   );
 };

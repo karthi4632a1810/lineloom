@@ -461,13 +461,21 @@ const buildLabTrackingPatch = (groups = []) => {
   return { labs_ordered: true, lab_logs, lab_start, lab_end };
 };
 
-const needsLabHisSync = (tracking = {}) => {
-  const inLabPath =
+const isInLabPath = (tracking = {}) => {
+  const plans = Array.isArray(tracking.post_consult_plans)
+    ? tracking.post_consult_plans.map((p) => String(p).trim().toLowerCase())
+    : [];
+  return (
     Boolean(tracking.labs_ordered) ||
     Boolean(tracking.lab_start) ||
     Boolean(tracking.lab_end) ||
-    (Array.isArray(tracking.lab_logs) && tracking.lab_logs.length > 0);
-  if (!tracking.consult_end || !inLabPath) {
+    (Array.isArray(tracking.lab_logs) && tracking.lab_logs.length > 0) ||
+    plans.includes("labs")
+  );
+};
+
+const needsLabHisSync = (tracking = {}) => {
+  if (!tracking.consult_end || !isInLabPath(tracking)) {
     return false;
   }
   const logs = Array.isArray(tracking.lab_logs) ? tracking.lab_logs : [];
@@ -477,12 +485,26 @@ const needsLabHisSync = (tracking = {}) => {
   return !logs.every((entry) => entry.completed_at || entry.end);
 };
 
+const pharmacyLogsMissingHisIds = (logs = []) =>
+  logs.some((entry) => {
+    const hasTime =
+      entry?.bill_at ||
+      entry?.start ||
+      entry?.request_at ||
+      entry?.completed_at ||
+      entry?.end;
+    return hasTime && !String(entry?.bill_no ?? "").trim();
+  });
+
 const needsPharmacyHisSync = (tracking = {}) => {
   if (!tracking.consult_end) {
     return false;
   }
   const logs = Array.isArray(tracking.pharmacy_logs) ? tracking.pharmacy_logs : [];
   if (!logs.length) {
+    return true;
+  }
+  if (pharmacyLogsMissingHisIds(logs)) {
     return true;
   }
   return !logs.every((entry) => entry.completed_at || entry.end);
@@ -594,9 +616,7 @@ const trySyncAllHisForToken = async (tokenId = "", token = null, tracking = null
   }
   const resolvedToken = token ?? (await getTokenOrThrow(tokenId));
   const resolvedTracking = tracking ?? (await ensureTrackingRecord(tokenId));
-  if (resolvedToken.status === "COMPLETED") {
-    return resolvedTracking;
-  }
+  const enrichPharmacyIds = pharmacyLogsMissingHisIds(resolvedTracking.pharmacy_logs);
   if (!resolvedTracking.consult_end) {
     return resolvedTracking;
   }
@@ -606,7 +626,7 @@ const trySyncAllHisForToken = async (tokenId = "", token = null, tracking = null
   }
 
   const needLab = needsLabHisSync(resolvedTracking);
-  const needPharmacy = needsPharmacyHisSync(resolvedTracking);
+  const needPharmacy = needsPharmacyHisSync(resolvedTracking) || enrichPharmacyIds;
   const needBilling = !hasBillingData(resolvedTracking);
   if (!needLab && !needPharmacy && !needBilling) {
     return resolvedTracking;
@@ -1204,7 +1224,8 @@ export const completeVisitAfterConsult = async (tokenId = "") => {
     patch.care_end = now;
     patch.treatment_logs = closeWorkflowLastOpen(tracking.treatment_logs, now);
   }
-  const next = Object.keys(patch).length ? await updateTracking(tokenId, patch) : tracking;
+  patch.visit_completed_at = now;
+  const next = await updateTracking(tokenId, patch);
   token.status = "COMPLETED";
   await token.save();
   return { token, tracking: next, metrics: calculateTimeMetrics(next, token.status) };
@@ -1436,9 +1457,10 @@ export const getCompletedTokens = async (filters = {}) => {
           : [],
         lab_start: tracking.lab_start ?? null,
         lab_end: tracking.lab_end ?? null,
+        visit_completed_at: tracking.visit_completed_at ?? null,
         created_at: token.created_at,
         department_queue_no: token.department_queue_no ?? null,
-        ...buildTatMetrics(tracking, token.status)
+        ...buildTatMetrics(tracking, token)
       };
     })
     .filter((row) => matchesLiveSearch(row, search));

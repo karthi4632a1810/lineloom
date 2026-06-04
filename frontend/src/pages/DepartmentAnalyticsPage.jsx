@@ -111,7 +111,7 @@ export const DepartmentAnalyticsPage = () => {
   }, [load]);
 
   return (
-    <section className="page">
+    <section className="page cc-page">
       <header className="page-header">
         <div>
           <h1>Department journey funnel</h1>

@@ -1,6 +1,15 @@
 import { env } from "../config/env.js";
 import { getHisPool, sql } from "../config/sqlServer.js";
 import { ApiError } from "../utils/apiError.js";
+import {
+  passThroughSqlDate,
+  passThroughSqlDateTime,
+  sqlAdmissionDisplayExpr,
+  sqlExcludeMockPatientIp,
+  sqlExcludeMockPatientOp,
+  sqlDateExpr,
+  sqlDateTimeExpr
+} from "../utils/hospitalDateTime.js";
 import { logger } from "../utils/logger.js";
 
 const MAX_RETRIES = 3;
@@ -306,20 +315,33 @@ const getLookupMeta = async () => {
   return cachedLookupMeta;
 };
 
-const formatDateOnly = (value = null) => {
-  if (value == null || value === "") {
-    return "";
-  }
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString().slice(0, 10);
-};
+const formatDateOnly = (value = null) => passThroughSqlDate(value);
 
-const formatDateTimeValue = (value = null) => {
-  if (value == null || value === "") {
-    return "";
-  }
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString().slice(0, 19).replace("T", " ");
+const mapSearchRow = (item = {}) => {
+  const type = item?.type === "IP" ? "IP" : "OP";
+  const dept = String(item?.dept_id ?? "");
+  const name = String(item?.c_pat_name ?? "Unknown");
+  return {
+    patient_id: String(item?.patient_id ?? ""),
+    visit_id: String(item?.visit_id ?? ""),
+    type,
+    reg_no: String(item?.visit_id ?? ""),
+    i_reg_no: String(item?.i_reg_no ?? ""),
+    c_pat_name: name,
+    d_dob: formatDateOnly(item?.d_dob),
+    c_sex: String(item?.c_sex ?? "").trim(),
+    i_user_id: String(item?.i_user_id ?? ""),
+    i_user_name: String(item?.i_user_name ?? "").trim(),
+    dept_id: dept,
+    dept_name: String(item?.dept_name ?? "").trim(),
+    admission: passThroughSqlDateTime(item?.admission),
+    ip_active:
+      type === "IP" && item?.ip_active != null && item?.ip_active !== ""
+        ? String(item.ip_active)
+        : "",
+    name,
+    department: String(item?.dept_name ?? "").trim() || dept
+  };
 };
 
 const normalizePatientId = (value = "") => {
@@ -373,6 +395,7 @@ export const fetchHisPatients = async () => {
     FROM [dbo].[Mast_OP_Admission] op
     INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
     WHERE CAST(op.dOP_dt AS DATE) = CAST(GETDATE() AS DATE)
+      AND ${sqlExcludeMockPatientOp(env.hisMockUserIds)}
     UNION ALL
     SELECT
       CAST(pm.iPat_id AS VARCHAR(100)) AS patient_id,
@@ -385,6 +408,7 @@ export const fetchHisPatients = async () => {
     FROM [dbo].[Mast_IP_Admission] ip
     INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
     WHERE CAST(ip.dIP_dt AS DATE) = CAST(GETDATE() AS DATE)
+      AND ${sqlExcludeMockPatientIp(env.hisMockUserIds)}
     ORDER BY dept_name, dept_id, name;
   `;
 
@@ -459,8 +483,8 @@ export const searchHisPatients = async (filters = {}) => {
     ? `(SELECT TOP 1 CAST(uu.${lookupMeta.user.nameCol} AS VARCHAR(200)) FROM ${lookupMeta.user.table} uu WHERE CAST(uu.${lookupMeta.user.idCol} AS VARCHAR(100)) = CAST(pm.iUser_id AS VARCHAR(100)))`
     : "CAST(NULL AS VARCHAR(200))";
 
-  const opConds = [];
-  const ipConds = [];
+  const opConds = [sqlExcludeMockPatientOp(env.hisMockUserIds)];
+  const ipConds = [sqlExcludeMockPatientIp(env.hisMockUserIds)];
 
   if (patientId) {
     const opIdentifierClauses = patientIdVariants.map(
@@ -487,12 +511,12 @@ export const searchHisPatients = async (filters = {}) => {
     );
   }
   if (dateFrom) {
-    opConds.push("op.dOP_dt >= @dateFrom");
-    ipConds.push("ip.dIP_dt >= @dateFrom");
+    opConds.push("CAST(op.dOP_dt AS DATE) >= CAST(@dateFrom AS DATE)");
+    ipConds.push("CAST(ip.dIP_dt AS DATE) >= CAST(@dateFrom AS DATE)");
   }
   if (dateTo) {
-    opConds.push("op.dOP_dt <= @dateTo");
-    ipConds.push("ip.dIP_dt <= @dateTo");
+    opConds.push("CAST(op.dOP_dt AS DATE) <= CAST(@dateTo AS DATE)");
+    ipConds.push("CAST(ip.dIP_dt AS DATE) <= CAST(@dateTo AS DATE)");
   }
 
   const opWhere = opConds.length ? `AND ${opConds.join(" AND ")}` : "";
@@ -512,16 +536,17 @@ export const searchHisPatients = async (filters = {}) => {
         CAST(op.iOP_Reg_No AS VARCHAR(100)) AS visit_id,
         CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
         CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
-        pm.dDob AS d_dob,
+        ${sqlDateExpr("pm.dDob")} AS d_dob,
         CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
         CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
         ${userNameExpr} AS i_user_name,
         CAST(op.iDept_id AS VARCHAR(100)) AS dept_id,
         ${deptNameFromOpExpr} AS dept_name,
-        op.dOP_dt AS admission,
+        ${sqlAdmissionDisplayExpr("op.dOP_dt")} AS admission,
         CAST(NULL AS VARCHAR(50)) AS ip_active,
         'OP' AS type,
-        op.dOP_dt AS visit_datetime,
+        ${sqlAdmissionDisplayExpr("op.dOP_dt")} AS visit_datetime,
+        op.dOP_dt AS visit_datetime_sort,
         ${opMatchRank} AS match_rank
       FROM [dbo].[Mast_OP_Admission] op
       INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
@@ -535,16 +560,17 @@ export const searchHisPatients = async (filters = {}) => {
         CAST(ip.iIP_Reg_No AS VARCHAR(100)) AS visit_id,
         CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
         CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
-        pm.dDob AS d_dob,
+        ${sqlDateExpr("pm.dDob")} AS d_dob,
         CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
         CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
         ${userNameExpr} AS i_user_name,
         CAST(ip.iDept_id AS VARCHAR(100)) AS dept_id,
         ${deptNameFromIpExpr} AS dept_name,
-        ip.dIP_dt AS admission,
+        ${sqlAdmissionDisplayExpr("ip.dIP_dt")} AS admission,
         CAST(ip.bStatus AS VARCHAR(50)) AS ip_active,
         'IP' AS type,
-        ip.dIP_dt AS visit_datetime,
+        ${sqlAdmissionDisplayExpr("ip.dIP_dt")} AS visit_datetime,
+        ip.dIP_dt AS visit_datetime_sort,
         ${ipMatchRank} AS match_rank
       FROM [dbo].[Mast_IP_Admission] ip
       INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
@@ -567,7 +593,7 @@ export const searchHisPatients = async (filters = {}) => {
       type,
       visit_datetime
     FROM Combined
-    ORDER BY match_rank ASC, visit_datetime DESC;
+    ORDER BY match_rank ASC, visit_datetime_sort DESC;
   `;
 
   const bindParams = (request) => {
@@ -581,41 +607,16 @@ export const searchHisPatients = async (filters = {}) => {
       request.input("regNo", sql.NVarChar(200), regNo);
     }
     if (dateFrom) {
-      request.input("dateFrom", sql.DateTime, new Date(`${dateFrom}T00:00:00`));
+      request.input("dateFrom", sql.VarChar(10), dateFrom);
     }
     if (dateTo) {
-      request.input("dateTo", sql.DateTime, new Date(`${dateTo}T23:59:59.997`));
+      request.input("dateTo", sql.VarChar(10), dateTo);
     }
   };
 
   try {
     const rows = await executeHisQueryWithRetry(query, 12000, bindParams);
-    const mapped = rows.map((item) => {
-      const type = item?.type === "IP" ? "IP" : "OP";
-      const dept = String(item?.dept_id ?? "");
-      const name = String(item?.c_pat_name ?? "Unknown");
-      return {
-        patient_id: String(item?.patient_id ?? ""),
-        visit_id: String(item?.visit_id ?? ""),
-        type,
-        reg_no: String(item?.visit_id ?? ""),
-        i_reg_no: String(item?.i_reg_no ?? ""),
-        c_pat_name: name,
-        d_dob: formatDateOnly(item?.d_dob),
-        c_sex: String(item?.c_sex ?? "").trim(),
-        i_user_id: String(item?.i_user_id ?? ""),
-        i_user_name: String(item?.i_user_name ?? "").trim(),
-        dept_id: dept,
-        dept_name: String(item?.dept_name ?? "").trim(),
-        admission: formatDateTimeValue(item?.admission),
-        ip_active:
-          type === "IP" && item?.ip_active != null && item?.ip_active !== ""
-            ? String(item.ip_active)
-            : "",
-        name,
-        department: String(item?.dept_name ?? "").trim() || dept
-      };
-    });
+    const mapped = rows.map((item) => mapSearchRow(item));
     setCache(cacheKey, mapped, CACHE_TTL.HIS_SEARCH);
     return mapped;
   } catch (error) {
@@ -711,19 +712,20 @@ export const fetchPatientVisitHistory = async (patientId = "") => {
         CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
         CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
         ${phoneExpr} AS phone,
-        pm.dDob AS d_dob,
+        ${sqlDateExpr("pm.dDob")} AS d_dob,
         CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
         CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
         ${userNameExpr} AS i_user_name,
         CAST(op.iDept_id AS VARCHAR(100)) AS dept_id,
         ${deptNameFromOpExpr} AS dept_name,
-        op.dOP_dt AS admission,
+        ${sqlAdmissionDisplayExpr("op.dOP_dt")} AS admission,
         CAST(NULL AS VARCHAR(50)) AS ip_active,
         'OP' AS type,
-        op.dOP_dt AS visit_datetime
+        ${sqlAdmissionDisplayExpr("op.dOP_dt")} AS visit_datetime,
+        op.dOP_dt AS visit_datetime_sort
       FROM [dbo].[Mast_OP_Admission] op
       INNER JOIN [dbo].[Mast_Patient] pm ON op.iPat_id = pm.iPat_id
-      WHERE ${patientWhere}
+      WHERE (${patientWhere}) AND ${sqlExcludeMockPatientOp(env.hisMockUserIds)}
 
       UNION ALL
 
@@ -733,19 +735,20 @@ export const fetchPatientVisitHistory = async (patientId = "") => {
         CAST(pm.iReg_No AS VARCHAR(100)) AS i_reg_no,
         CAST(pm.cPat_Name AS VARCHAR(200)) AS c_pat_name,
         ${phoneExpr} AS phone,
-        pm.dDob AS d_dob,
+        ${sqlDateExpr("pm.dDob")} AS d_dob,
         CAST(pm.cSex AS VARCHAR(20)) AS c_sex,
         CAST(pm.iUser_id AS VARCHAR(100)) AS i_user_id,
         ${userNameExpr} AS i_user_name,
         CAST(ip.iDept_id AS VARCHAR(100)) AS dept_id,
         ${deptNameFromIpExpr} AS dept_name,
-        ip.dIP_dt AS admission,
+        ${sqlAdmissionDisplayExpr("ip.dIP_dt")} AS admission,
         CAST(ip.bStatus AS VARCHAR(50)) AS ip_active,
         'IP' AS type,
-        ip.dIP_dt AS visit_datetime
+        ${sqlAdmissionDisplayExpr("ip.dIP_dt")} AS visit_datetime,
+        ip.dIP_dt AS visit_datetime_sort
       FROM [dbo].[Mast_IP_Admission] ip
       INNER JOIN [dbo].[Mast_Patient] pm ON ip.iPat_id = pm.iPat_id
-      WHERE ${patientWhere}
+      WHERE (${patientWhere}) AND ${sqlExcludeMockPatientIp(env.hisMockUserIds)}
     )
     SELECT
       patient_id,
@@ -764,7 +767,7 @@ export const fetchPatientVisitHistory = async (patientId = "") => {
       type,
       visit_datetime
     FROM Combined
-    ORDER BY visit_datetime DESC, visit_id DESC;
+    ORDER BY visit_datetime_sort DESC, visit_id DESC;
   `;
 
   try {
@@ -790,13 +793,13 @@ export const fetchPatientVisitHistory = async (patientId = "") => {
         dept_id: dept,
         dept_name: String(item?.dept_name ?? "").trim(),
         department: String(item?.dept_name ?? "").trim() || dept || "General",
-        admission: formatDateTimeValue(item?.admission),
+        admission: passThroughSqlDateTime(item?.admission),
         ip_active:
           type === "IP" && item?.ip_active != null && item?.ip_active !== ""
             ? String(item.ip_active).trim()
             : "",
         type,
-        visit_datetime: formatDateTimeValue(item?.visit_datetime)
+        visit_datetime: passThroughSqlDateTime(item?.visit_datetime)
       };
     });
     setCache(cacheKey, mapped, CACHE_TTL.HIS_SEARCH);

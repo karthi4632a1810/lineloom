@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
 import { RevertConfirmModal } from "../components/RevertConfirmModal";
 import { fetchActiveDepartments } from "../services/departmentService";
 import { canRevertVisit } from "../utils/revertAnchors";
@@ -299,12 +300,11 @@ export const LiveQueuePage = () => {
   };
 
   return (
-    <section className="page live-queue-page">
-      <h2>Live Queue</h2>
-      <p className="live-queue-lead">
-        All open tokens (not completed), every date. Search matches patient name, phone, patient / reg
-        number, OP/IP visit number, or token id.
-      </p>
+    <section className="page cc-page live-queue-page">
+      <ClinicalPageHeader
+        title="Live queue"
+        subtitle="All open tokens (not completed). Search by name, phone, reg no, OP/IP visit number, or token id."
+      />
 
       <form className="card filter-grid live-queue-filters" onSubmit={handleApplySearch}>
         <input

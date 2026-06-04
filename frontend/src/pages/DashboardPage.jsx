@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
 import { RevertConfirmModal } from "../components/RevertConfirmModal";
 import { fetchActiveDepartments } from "../services/departmentService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
@@ -339,8 +340,11 @@ export const DashboardPage = () => {
   };
 
   return (
-    <section className="page">
-      <h2>Patient Queue Dashboard</h2>
+    <section className="page cc-page">
+      <ClinicalPageHeader
+        title="Patient queue overview"
+        subtitle="Track waiting, consulting, treatment, and completion across departments for the selected date range."
+      />
 
       {intelligenceBrief?.stats ? (
         <div className="intel-strip card">

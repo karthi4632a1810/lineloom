@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
 import { fetchCompletedQueue } from "../services/tokenService";
 import { tokenDetailPath } from "../utils/tokenPaths.js";
 
@@ -71,9 +72,11 @@ export const CompletedQueuePage = () => {
   const visibleRows = useMemo(() => rows, [rows]);
 
   return (
-    <section className="page live-queue-page">
-      <h2>Completed Tokens</h2>
-      <p className="live-queue-lead">Shows only completed tokens from MongoDB.</p>
+    <section className="page cc-page live-queue-page">
+      <ClinicalPageHeader
+        title="Completed visits"
+        subtitle="Finished tokens from MongoDB with overall turnaround and journey summary."
+      />
 
       <form className="card filter-grid live-queue-filters" onSubmit={handleApplySearch}>
         <input
@@ -137,7 +140,7 @@ export const CompletedQueuePage = () => {
                   <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.consulting_tat_minutes))}</td>
                   <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.treatment_tat_minutes))}</td>
                   <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.overall_tat_minutes))}</td>
-                  <td>{formatDateTime(row.treatment_end)}</td>
+                  <td>{formatDateTime(row.visit_completed_at ?? row.treatment_end)}</td>
                   <td>
                     <span className="status-chip status-completed">COMPLETED</span>
                   </td>

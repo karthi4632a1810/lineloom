@@ -32,6 +32,28 @@ export const parseBillNoFromCell = (value = "") => {
   return digits || raw.trim();
 };
 
+/** Resolve SP column names regardless of spacing/casing from mssql driver. */
+export const pickSqlColumn = (row = {}, ...candidates) => {
+  if (!row || typeof row !== "object") {
+    return undefined;
+  }
+  for (const name of candidates) {
+    const value = row[name];
+    if (value != null && value !== "") {
+      return value;
+    }
+  }
+  const keys = Object.keys(row);
+  for (const candidate of candidates) {
+    const norm = String(candidate).replace(/\s+/g, "").toLowerCase();
+    const key = keys.find((k) => k.replace(/\s+/g, "").toLowerCase() === norm);
+    if (key != null && row[key] != null && row[key] !== "") {
+      return row[key];
+    }
+  }
+  return undefined;
+};
+
 /** Parses "03-06-2026 08:41" from KMCH pharmacy report. */
 export const parsePharmacyDateCell = (value = "") => {
   const raw = String(value ?? "").trim();
@@ -58,15 +80,29 @@ export const parsePharmacyDateCell = (value = "") => {
 };
 
 const mapPharmacyRow = (row = {}) => ({
-  reg_no: String(row["REG / IP NO"] ?? row.RegNo ?? row.reg_no ?? "").trim(),
-  bill_no: parseBillNoFromCell(row["BILL NO"] ?? row.BillNo),
-  request_no: String(row["REQUEST NO"] ?? row.RequestNo ?? "").trim(),
-  request_at: parsePharmacyDateCell(row["REQUEST DATE"] ?? row.RequestDate),
-  bill_at: parsePharmacyDateCell(row["BILL DATE"] ?? row.BillDate),
-  completed_at: parsePharmacyDateCell(row["APPROVE DATE"] ?? row.ApproveDate),
-  issue_type: String(row["ISSUE TYPE"] ?? row.IssueType ?? "").trim(),
-  dept: String(row.DEPARTMENT ?? row.Department ?? "").trim(),
-  patient_name: String(row["PATIENT NAME"] ?? row.PatientName ?? "").trim()
+  reg_no: String(
+    pickSqlColumn(row, "REG / IP NO", "REG/IP NO", "RegNo", "reg_no") ?? ""
+  ).trim(),
+  bill_no: parseBillNoFromCell(
+    pickSqlColumn(row, "BILL NO", "Bill No", "BillNo", "bill_no", "BILLNO")
+  ),
+  request_no: String(
+    pickSqlColumn(row, "REQUEST NO", "Request No", "RequestNo", "request_no", "REQUESTNO") ?? ""
+  ).trim(),
+  request_at: parsePharmacyDateCell(
+    pickSqlColumn(row, "REQUEST DATE", "Request Date", "RequestDate", "request_date")
+  ),
+  bill_at: parsePharmacyDateCell(
+    pickSqlColumn(row, "BILL DATE", "Bill Date", "BillDate", "bill_date")
+  ),
+  completed_at: parsePharmacyDateCell(
+    pickSqlColumn(row, "APPROVE DATE", "Approve Date", "ApproveDate", "approve_date")
+  ),
+  issue_type: String(pickSqlColumn(row, "ISSUE TYPE", "Issue Type", "IssueType") ?? "").trim(),
+  dept: String(pickSqlColumn(row, "DEPARTMENT", "Department", "dept") ?? "").trim(),
+  patient_name: String(
+    pickSqlColumn(row, "PATIENT NAME", "Patient Name", "PatientName") ?? ""
+  ).trim()
 });
 
 const mergePharmacyGroup = (existing = null, row = {}) => {
@@ -93,10 +129,14 @@ const mergePharmacyGroup = (existing = null, row = {}) => {
   };
   return {
     ...existing,
+    bill_no: String(row.bill_no || existing.bill_no || "").trim(),
+    request_no: String(row.request_no || existing.request_no || "").trim(),
     request_at: pickEarlier(existing.request_at, row.request_at),
     bill_at: pickEarlier(existing.bill_at, row.bill_at),
     completed_at: pickLater(existing.completed_at, row.completed_at),
-    issue_type: row.issue_type || existing.issue_type
+    issue_type: row.issue_type || existing.issue_type,
+    dept: row.dept || existing.dept,
+    patient_name: row.patient_name || existing.patient_name
   };
 };
 
