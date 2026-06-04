@@ -26,7 +26,9 @@ import { TokenDetailPage } from "./pages/TokenDetailPage";
 
 
 
-const AppLayout = ({ children, title = "Clinical Curator" }) => (
+import { APP_NAME } from "./constants/brand.js";
+
+const AppLayout = ({ children, title = APP_NAME }) => (
 
   <ClinicalShell pageTitle={title}>{children}</ClinicalShell>
 

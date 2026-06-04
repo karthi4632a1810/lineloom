@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { APP_NAME } from "../constants/brand.js";
 import { loginRequest } from "../services/authService";
 import { resetAuthRedirectFlag } from "../services/apiClient";
 
@@ -68,7 +69,7 @@ export const LoginPage = () => {
             Welcome back
           </h1>
           <p className="login-subtitle">
-            Sign in to <strong>Clinical Curator</strong> to manage queues, visits, and patient journeys.
+            Sign in to <strong>{APP_NAME}</strong> to manage queues, visits, and patient journeys.
           </p>
         </header>
 

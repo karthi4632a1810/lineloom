@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { APP_NAME, APP_SHORT, APP_TAGLINE } from "../../constants/brand.js";
 
 const navItems = [
   { to: "/overview", label: "Overview", icon: "◉" },
@@ -9,7 +10,7 @@ const navItems = [
   { to: "/department-analytics", label: "Analytics", icon: "◫" }
 ];
 
-export const ClinicalShell = ({ children, pageTitle = "Clinical Curator" }) => {
+export const ClinicalShell = ({ children, pageTitle = APP_NAME }) => {
   const navigate = useNavigate();
   const role = localStorage.getItem("auth_role") ?? "staff";
 
@@ -23,10 +24,10 @@ export const ClinicalShell = ({ children, pageTitle = "Clinical Curator" }) => {
     <>
       <aside className="cc-sidebar" aria-label="Main navigation">
         <div className="cc-sidebar-brand">
-          <div className="cc-sidebar-logo">CC</div>
+          <div className="cc-sidebar-logo">{APP_SHORT}</div>
           <div>
-            <h4>Clinical Curator</h4>
-            <p>KMCH · Queue Ops</p>
+            <h4>{APP_NAME}</h4>
+            <p>{APP_TAGLINE}</p>
           </div>
         </div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>

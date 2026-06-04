@@ -25,7 +25,7 @@ export const Navbar = () => {
     <>
       <header className="top-nav">
         <div className="top-nav-left">
-          <span className="brand-title">Clinical Curator</span>
+          <span className="brand-title">NexaFlow</span>
         </div>
         <div className="top-nav-right">
           <input className="header-search" placeholder="Search Patients..." />

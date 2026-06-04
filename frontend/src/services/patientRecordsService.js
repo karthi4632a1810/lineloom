@@ -1,7 +1,7 @@
 import { apiClient } from "./apiClient";
 
 /**
- * Combined HIS + LineLoom (MongoDB) patient search for Patient Records.
+ * Combined HIS + NexaFlow (MongoDB) patient search for Patient Records.
  */
 export const searchPatientRecords = async (filters = {}) => {
   const { data } = await apiClient.get("/patients/search", {

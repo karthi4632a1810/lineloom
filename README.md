@@ -1,4 +1,4 @@
-# Patient Waiting Time Tracker (LineLoom)
+# NexaFlow (Patient Waiting Time Tracker)
 
 Full-stack app to track outpatient and inpatient waiting, consultation, care, and break times. It connects to your existing Hospital Information System (SQL Server, read-only) for patient and visit data, and stores queue tokens and timing only in MongoDB.
 admin.apdch.edu.in

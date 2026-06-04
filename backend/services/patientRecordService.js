@@ -489,7 +489,7 @@ const mapTokenToSearchRow = (token = {}) => {
     department: String(token?.department ?? "").trim(),
     admission: createdAt,
     visit_datetime: createdAt,
-    type: "LineLoom",
+    type: "NexaFlow",
     token_id: String(token?.token_id ?? "").trim(),
     token_status: toDisplayStatus(token?.status),
     tracked: true,

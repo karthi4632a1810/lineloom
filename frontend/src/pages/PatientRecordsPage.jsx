@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchTokenJourney } from "../services/journeyService";
 import { fetchPatientRecord, searchPatientRecords } from "../services/patientRecordsService";
+import { APP_NAME } from "../constants/brand.js";
 import { getVisitPhaseChipClass } from "../utils/revertAnchors";
 
 const initialSearch = {
@@ -77,10 +78,10 @@ const getInitials = (name = "") =>
 const sourceLabel = (row = {}) => {
   const source = String(row?.source ?? "").toLowerCase();
   if (source === "both") {
-    return "HIS + LineLoom";
+    return `HIS + ${APP_NAME}`;
   }
   if (source === "lineloom") {
-    return "LineLoom";
+    return APP_NAME;
   }
   return "HIS";
 };
@@ -132,7 +133,7 @@ const getEncounterChipClass = (encounter = {}) => {
 
 const JourneyTimeline = ({ loading = false, error = "", steps = [], tracked = false }) => {
   if (!tracked) {
-    return <p className="muted-inline">No LineLoom token timeline exists for this HIS-only visit.</p>;
+    return <p className="muted-inline">No {APP_NAME} token timeline exists for this HIS-only visit.</p>;
   }
   if (loading) {
     return <p className="muted-inline">Loading visit timeline...</p>;
@@ -436,7 +437,7 @@ export const PatientRecordsPage = () => {
         <div>
           <h1>Patient Records</h1>
           <p className="page-subtitle">
-            Search combines HIS admissions and LineLoom tokens (MongoDB). Open a patient to see the merged record.
+            Search combines HIS admissions and {APP_NAME} tokens (MongoDB). Open a patient to see the merged record.
           </p>
         </div>
       </div>
@@ -502,7 +503,7 @@ export const PatientRecordsPage = () => {
           <div>
             <h3>Search Results</h3>
             <p className="page-subtitle">
-              HIS = hospital visit only. LineLoom = tracked in MongoDB. HIS + LineLoom = both match.
+              HIS = hospital visit only. {APP_NAME} = tracked in MongoDB. HIS + {APP_NAME} = both match.
             </p>
           </div>
         </div>
@@ -527,7 +528,7 @@ export const PatientRecordsPage = () => {
                   <th>Latest visit</th>
                   <th>Department</th>
                   <th>Source</th>
-                  <th>LineLoom</th>
+                  <th>{APP_NAME}</th>
                   <th>Matches</th>
                   <th>Action</th>
                 </tr>
@@ -558,7 +559,7 @@ export const PatientRecordsPage = () => {
                     <td>
                       <span
                         className={`patient-records-badge ${
-                          row.latest_source === "HIS + LineLoom"
+                          row.latest_source === `HIS + ${APP_NAME}`
                             ? "patient-records-badge--both"
                             : row.tracked
                               ? "patient-records-badge--lineloom"
@@ -665,7 +666,7 @@ export const PatientRecordsPage = () => {
           <article className="card patient-records-mongo-card">
             <div className="patient-records-section-head">
               <div>
-                <h3>LineLoom patient record (MongoDB)</h3>
+                <h3>{APP_NAME} patient record (MongoDB)</h3>
                 <p className="page-subtitle">
                   Complete token and time-tracking data stored in MongoDB for this patient.
                 </p>
@@ -688,7 +689,7 @@ export const PatientRecordsPage = () => {
             />
             {!mongoTokens.length ? (
               <p className="muted-inline" style={{ marginTop: 12 }}>
-                No LineLoom tokens exist in MongoDB for this patient yet. HIS-only visits appear in visit
+                No {APP_NAME} tokens exist in MongoDB for this patient yet. HIS-only visits appear in visit
                 history below.
               </p>
             ) : (
