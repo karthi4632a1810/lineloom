@@ -2609,6 +2609,11 @@ tr.clickable-row {
   flex-wrap: wrap;
 }
 
+.patient-records-download-btn {
+  align-self: flex-end;
+  white-space: nowrap;
+}
+
 .patient-records-search-actions .btn-secondary {
   background: #e2e8f0;
   color: #0f172a;

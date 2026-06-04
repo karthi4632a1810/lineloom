@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchTokenJourney } from "../services/journeyService";
-import { fetchPatientRecord, searchPatientRecords } from "../services/patientRecordsService";
+import {
+  downloadPatientReport,
+  fetchPatientRecord,
+  searchPatientRecords
+} from "../services/patientRecordsService";
 import { APP_NAME } from "../constants/brand.js";
 import { getVisitPhaseChipClass } from "../utils/revertAnchors";
 
@@ -238,6 +242,8 @@ export const PatientRecordsPage = () => {
     error: "",
     data: null
   });
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+  const [reportError, setReportError] = useState("");
 
   const groupedPatients = useMemo(() => {
     const grouped = searchRows.reduce((acc, row) => {
@@ -389,11 +395,55 @@ export const PatientRecordsPage = () => {
     setSearchRows([]);
     setHasSearched(false);
     setSearchError("");
+    setReportError("");
     setSelectedPatientId("");
     setRecord(null);
     setRecordError("");
     setSelectedEncounterKey("");
     setJourneyState({ loading: false, error: "", data: null });
+  };
+
+  const runReportDownload = async (reportFilters = {}) => {
+    const dateFrom = String(reportFilters.date_from ?? "").trim();
+    const dateTo = String(reportFilters.date_to ?? "").trim();
+    const patientId = String(reportFilters.patient_id ?? "").trim();
+
+    if (!patientId && (!dateFrom || !dateTo)) {
+      setReportError("Set admission from and to dates for bulk download.");
+      return;
+    }
+
+    setIsDownloadingReport(true);
+    setReportError("");
+    try {
+      await downloadPatientReport(reportFilters);
+    } catch (error) {
+      setReportError(error?.message ?? "Unable to download report");
+    } finally {
+      setIsDownloadingReport(false);
+    }
+  };
+
+  const handleDownloadBulkReport = () => {
+    runReportDownload({
+      patient_id: "",
+      name: filters.name,
+      reg_no: filters.reg_no,
+      date_from: filters.date_from,
+      date_to: filters.date_to
+    });
+  };
+
+  const handleDownloadPatientReport = () => {
+    if (!selectedPatientId) {
+      setReportError("Open a patient record first.");
+      return;
+    }
+    runReportDownload({
+      patient_id: selectedPatientId,
+      date_from: filters.date_from,
+      date_to: filters.date_to
+    });
   };
 
   const summary = record?.summary ?? {};
@@ -490,6 +540,15 @@ export const PatientRecordsPage = () => {
           <button type="submit" disabled={isSearching}>
             {isSearching ? "Searching..." : "Search"}
           </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={isDownloadingReport || !filters.date_from || !filters.date_to}
+            onClick={handleDownloadBulkReport}
+            title="CSV for all patients matching search filters in the date range"
+          >
+            {isDownloadingReport ? "Preparing…" : "Download bulk report"}
+          </button>
           <button type="button" className="btn-secondary" onClick={handleClear}>
             Clear
           </button>
@@ -497,6 +556,7 @@ export const PatientRecordsPage = () => {
       </form>
 
       {searchError ? <p className="error-text">{searchError}</p> : null}
+      {reportError ? <p className="error-text">{reportError}</p> : null}
 
       <article className="card token-search-results-card patient-records-search-results">
         <div className="patient-records-section-head">
@@ -633,6 +693,15 @@ export const PatientRecordsPage = () => {
                 <span>Latest token</span>
                 <strong>{summary.latest_token_id || "--"}</strong>
               </div>
+              <button
+                type="button"
+                className="btn-secondary patient-records-download-btn"
+                disabled={isDownloadingReport}
+                onClick={handleDownloadPatientReport}
+                title="CSV for this patient (optional: limit with admission dates above)"
+              >
+                {isDownloadingReport ? "Preparing…" : "Download patient report"}
+              </button>
             </div>
           </header>
 
