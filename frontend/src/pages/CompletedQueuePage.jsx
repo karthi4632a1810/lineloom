@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
+import { QueuePatientCard } from "../components/queue/QueuePatientCard.jsx";
 import { fetchCompletedQueue } from "../services/tokenService";
-import { tokenDetailPath } from "../utils/tokenPaths.js";
+import { goToTokenDetail } from "../utils/tokenPaths.js";
 
 const formatDateTime = (value = null) => {
   if (!value) {
@@ -14,8 +15,6 @@ const formatDateTime = (value = null) => {
   }
   return date.toLocaleString();
 };
-
-const normalizeTokenId = (value = "") => String(value ?? "").replace(/^\/+|\/+$/g, "");
 
 const formatSeconds = (totalSeconds = null) => {
   if (totalSeconds == null) {
@@ -36,6 +35,19 @@ const toSecondsFromMinutes = (value = null) => {
     return null;
   }
   return Math.max(0, Math.round(Number(value) * 60));
+};
+
+const getCompletedTatSeconds = (row = {}, key = "") => {
+  if (key === "waiting") {
+    return toSecondsFromMinutes(row.waiting_tat_minutes);
+  }
+  if (key === "consult") {
+    return toSecondsFromMinutes(row.consulting_tat_minutes);
+  }
+  if (key === "treatment") {
+    return toSecondsFromMinutes(row.treatment_tat_minutes);
+  }
+  return null;
 };
 
 export const CompletedQueuePage = () => {
@@ -72,85 +84,118 @@ export const CompletedQueuePage = () => {
   const visibleRows = useMemo(() => rows, [rows]);
 
   return (
-    <section className="page cc-page live-queue-page">
+    <section className="page cc-page queue-layout-page live-queue-page nf-cq-modern">
       <ClinicalPageHeader
         title="Completed visits"
-        subtitle="Finished tokens from MongoDB with overall turnaround and journey summary."
+        subtitle="Finished tokens with turnaround times and journey summary."
       />
 
-      <form className="card filter-grid live-queue-filters" onSubmit={handleApplySearch}>
-        <input
-          type="search"
-          name="search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Name, phone, reg no, OP/IP visit no, token id…"
-          className="live-queue-search"
-        />
-        <button type="submit">Search</button>
+      <div className="nf-stat-grid nf-cq-modern-stats" aria-label="Completed visits summary">
+        <article className="summary-card nf-stat-card nf-stat-card--done">
+          <h4>Completed</h4>
+          <p className="nf-stat-value">{visibleRows.length}</p>
+          <span className="nf-stat-caption">visits</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--avg-overall">
+          <h4>Avg overall TAT</h4>
+          <p className="nf-stat-value">
+            {visibleRows.length
+              ? `${Math.round(
+                  visibleRows.reduce((sum, row) => sum + (Number(row.overall_tat_minutes) || 0), 0) /
+                    visibleRows.length
+                )}m`
+              : "—"}
+          </p>
+          <span className="nf-stat-caption">minutes</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--avg-wait">
+          <h4>Avg wait</h4>
+          <p className="nf-stat-value">
+            {visibleRows.filter((row) => row.waiting_tat_minutes != null).length
+              ? `${Math.round(
+                  visibleRows.reduce((sum, row) => sum + (Number(row.waiting_tat_minutes) || 0), 0) /
+                    visibleRows.filter((row) => row.waiting_tat_minutes != null).length
+                )}m`
+              : "—"}
+          </p>
+          <span className="nf-stat-caption">minutes</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--avg-consult">
+          <h4>Avg consult</h4>
+          <p className="nf-stat-value">
+            {visibleRows.filter((row) => row.consulting_tat_minutes != null).length
+              ? `${Math.round(
+                  visibleRows.reduce((sum, row) => sum + (Number(row.consulting_tat_minutes) || 0), 0) /
+                    visibleRows.filter((row) => row.consulting_tat_minutes != null).length
+                )}m`
+              : "—"}
+          </p>
+          <span className="nf-stat-caption">minutes</span>
+        </article>
+      </div>
+
+      <form className="nf-lq-toolbar nf-cq-modern-toolbar" onSubmit={handleApplySearch}>
+        <div className="nf-panel-head">
+          <h2 className="nf-panel-title">Search</h2>
+          <p className="nf-panel-sub">Name, phone, reg no, visit no, or token id.</p>
+        </div>
+        <div className="nf-lq-toolbar-fields nf-lq-toolbar-fields--single">
+          <div className="nf-lq-field">
+            <label htmlFor="completed_search">Search</label>
+            <input
+              id="completed_search"
+              type="search"
+              name="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Name, phone, reg no, OP/IP visit no, token id…"
+              className="nf-lq-input"
+            />
+          </div>
+        </div>
+        <div className="nf-lq-toolbar-actions">
+          <button type="submit" className="nf-lq-btn nf-lq-btn--primary">
+            Search
+          </button>
+        </div>
       </form>
 
       {error ? <p className="error-text">{error}</p> : null}
-      {isLoading ? <p>Loading completed tokens…</p> : null}
-
-      {!isLoading && !error && !visibleRows.length ? <p>No completed tokens found.</p> : null}
+      {isLoading ? <p className="muted-inline">Loading completed tokens…</p> : null}
+      {!isLoading && !error && !visibleRows.length ? (
+        <p className="muted-inline">No completed tokens found.</p>
+      ) : null}
 
       {!isLoading && visibleRows.length ? (
-        <article className="card table-card">
-          <table>
-            <thead>
-              <tr>
-                <th className="col-token-no">Token #</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Department</th>
-                <th className="col-tat">Waiting TAT</th>
-                <th className="col-tat">Consult TAT</th>
-                <th className="col-tat">Treatment TAT</th>
-                <th className="col-tat">Overall TAT</th>
-                <th>Completed At</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => (
-                <tr
+        <div className="nf-cq-modern-queue-panel">
+          <div className="nf-lq-list-head">
+            <div>
+              <h2>Completed visits</h2>
+              <p>Click a card to open the full visit record.</p>
+            </div>
+            <p>
+              <strong>{visibleRows.length}</strong> token{visibleRows.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="nf-lq-list">
+            {visibleRows.map((row) => {
+              const completedAt = formatDateTime(row.visit_completed_at ?? row.treatment_end);
+              return (
+                <QueuePatientCard
                   key={row.token_id}
-                  className="clickable-row"
-                  onClick={() => {
-                    const cleanId = normalizeTokenId(row.token_id);
-                    if (!cleanId) {
-                      return;
-                    }
-                    navigate(tokenDetailPath(cleanId));
-                  }}
-                >
-                  <td className="col-token-no">
-                    <span className="token-queue-no" title={`${row.department} queue number at visit`}>
-                      #{row.department_queue_no ?? "—"}
-                    </span>
-                    <span className="token-queue-id" title={row.token_id}>
-                      {row.token_id}
-                    </span>
-                  </td>
-                  <td>{row.name}</td>
-                  <td>{row.phone || "—"}</td>
-                  <td>{row.department}</td>
-                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.waiting_tat_minutes))}</td>
-                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.consulting_tat_minutes))}</td>
-                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.treatment_tat_minutes))}</td>
-                  <td className="col-tat">{formatSeconds(toSecondsFromMinutes(row.overall_tat_minutes))}</td>
-                  <td>{formatDateTime(row.visit_completed_at ?? row.treatment_end)}</td>
-                  <td>
-                    <span className="status-chip status-completed">COMPLETED</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
+                  row={{ ...row, status: row.status || "COMPLETED" }}
+                  showActions={false}
+                  formatSeconds={formatSeconds}
+                  getTatSeconds={getCompletedTatSeconds}
+                  overallSeconds={toSecondsFromMinutes(row.overall_tat_minutes)}
+                  footerNote={`Completed ${completedAt}`}
+                  onOpenDetail={(r) => goToTokenDetail(navigate, r.token_id)}
+                />
+              );
+            })}
+          </div>
+        </div>
       ) : null}
     </section>
   );
 };
-

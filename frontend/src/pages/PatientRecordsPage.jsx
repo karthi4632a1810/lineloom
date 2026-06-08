@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
+import { tokenDetailPath } from "../utils/tokenPaths.js";
 import { fetchTokenJourney } from "../services/journeyService";
 import {
   downloadPatientReport,
@@ -69,15 +71,6 @@ const formatCurrency = (value = 0) =>
     currency: "INR",
     maximumFractionDigits: 2
   }).format(Number(value ?? 0) || 0);
-
-const getInitials = (name = "") =>
-  String(name ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((chunk) => chunk[0]?.toUpperCase() ?? "")
-    .join("") || "PR";
 
 const sourceLabel = (row = {}) => {
   const source = String(row?.source ?? "").toLowerCase();
@@ -244,6 +237,8 @@ export const PatientRecordsPage = () => {
   });
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [reportError, setReportError] = useState("");
+  const recordDetailRef = useRef(null);
+  const visitDetailRef = useRef(null);
 
   const groupedPatients = useMemo(() => {
     const grouped = searchRows.reduce((acc, row) => {
@@ -358,12 +353,22 @@ export const PatientRecordsPage = () => {
     try {
       const payload = await fetchPatientRecord(id);
       setRecord(payload);
+      window.requestAnimationFrame(() => {
+        recordDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (error) {
       setRecord(null);
       setRecordError(error?.message ?? "Unable to load patient record");
     } finally {
       setIsRecordLoading(false);
     }
+  };
+
+  const selectEncounter = (encounterKey = "") => {
+    setSelectedEncounterKey(encounterKey);
+    window.requestAnimationFrame(() => {
+      visitDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   };
 
   const handleSearch = async (event) => {
@@ -396,6 +401,14 @@ export const PatientRecordsPage = () => {
     setHasSearched(false);
     setSearchError("");
     setReportError("");
+    setSelectedPatientId("");
+    setRecord(null);
+    setRecordError("");
+    setSelectedEncounterKey("");
+    setJourneyState({ loading: false, error: "", data: null });
+  };
+
+  const handleBackToSearch = () => {
     setSelectedPatientId("");
     setRecord(null);
     setRecordError("");
@@ -448,7 +461,6 @@ export const PatientRecordsPage = () => {
 
   const summary = record?.summary ?? {};
   const patient = record?.patient ?? {};
-  const mongoTokens = Array.isArray(record?.mongodb?.tokens) ? record.mongodb.tokens : [];
   const journeySteps = Array.isArray(journeyState.data?.timeline) ? journeyState.data.timeline : [];
 
   const selectedTracking = selectedEncounter?.time_tracking ?? {};
@@ -482,18 +494,54 @@ export const PatientRecordsPage = () => {
   }));
 
   return (
-    <section className="page cc-page patient-records-page">
-      <div className="page-header">
-        <div>
-          <h1>Patient Records</h1>
-          <p className="page-subtitle">
-            Search combines HIS admissions and {APP_NAME} tokens (MongoDB). Open a patient to see the merged record.
-          </p>
-        </div>
-      </div>
+    <section className="page cc-page patient-records-page nf-pr-modern">
+      <ClinicalPageHeader
+        title="Patient Records"
+        subtitle={`Search HIS and ${APP_NAME}, open a patient, then review visits and workflow in one place.`}
+      />
 
-      <form className="card token-search-card token-search-filters patient-records-search-card" onSubmit={handleSearch}>
-        <div className="token-search-fields">
+      {!record ? (
+        <div className="nf-stat-grid nf-pr-modern-stats" aria-label="Search summary">
+          <article className="summary-card nf-stat-card nf-stat-card--total">
+            <h4>Patients found</h4>
+            <p className="nf-stat-value">{hasSearched ? groupedPatients.length : "—"}</p>
+            <span className="nf-stat-caption">matches</span>
+          </article>
+          <article className="summary-card nf-stat-card nf-stat-card--tracked">
+            <h4>Tracked</h4>
+            <p className="nf-stat-value">
+              {hasSearched ? groupedPatients.filter((row) => row.tracked).length : "—"}
+            </p>
+            <span className="nf-stat-caption">in NexaFlow</span>
+          </article>
+          <article className="summary-card nf-stat-card nf-stat-card--his">
+            <h4>HIS only</h4>
+            <p className="nf-stat-value">
+              {hasSearched ? groupedPatients.filter((row) => !row.tracked).length : "—"}
+            </p>
+            <span className="nf-stat-caption">not tracked</span>
+          </article>
+          <article className="summary-card nf-stat-card nf-stat-card--both">
+            <h4>HIS + NexaFlow</h4>
+            <p className="nf-stat-value">
+              {hasSearched
+                ? groupedPatients.filter((row) => String(row.latest_source ?? "").includes("+")).length
+                : "—"}
+            </p>
+            <span className="nf-stat-caption">both sources</span>
+          </article>
+        </div>
+      ) : null}
+
+      <form
+        className="nf-panel nf-pr-panel patient-records-search-card token-search-filters nf-pr-modern-search"
+        onSubmit={handleSearch}
+      >
+        <div className="nf-panel-head">
+          <h2 className="nf-panel-title">Search patients</h2>
+          <p className="nf-panel-sub">HIS admissions and {APP_NAME} tokens — use any field, then Search.</p>
+        </div>
+        <div className="nf-pr-fields token-search-fields">
           <label className="token-search-field">
             <span>Patient ID / Visit No</span>
             <input
@@ -501,7 +549,8 @@ export const PatientRecordsPage = () => {
               name="patient_id"
               value={filters.patient_id}
               onChange={handleFilterChange}
-              placeholder="Patient id or visit number"
+              placeholder="Patient ID / visit no"
+              aria-label="Patient ID or visit number"
               autoComplete="off"
             />
           </label>
@@ -512,7 +561,8 @@ export const PatientRecordsPage = () => {
               name="name"
               value={filters.name}
               onChange={handleFilterChange}
-              placeholder="Contains match"
+              placeholder="Patient name"
+              aria-label="Patient name"
               autoComplete="off"
             />
           </label>
@@ -523,33 +573,46 @@ export const PatientRecordsPage = () => {
               name="reg_no"
               value={filters.reg_no}
               onChange={handleFilterChange}
-              placeholder="Reg no or internal reg"
+              placeholder="IP / OP reg no / iReg_No"
+              aria-label="Registration number"
               autoComplete="off"
             />
           </label>
           <label className="token-search-field">
             <span>Admission from</span>
-            <input type="date" name="date_from" value={filters.date_from} onChange={handleFilterChange} />
+            <input
+              type="date"
+              name="date_from"
+              value={filters.date_from}
+              onChange={handleFilterChange}
+              aria-label="Admission from"
+            />
           </label>
           <label className="token-search-field">
             <span>Admission to</span>
-            <input type="date" name="date_to" value={filters.date_to} onChange={handleFilterChange} />
+            <input
+              type="date"
+              name="date_to"
+              value={filters.date_to}
+              onChange={handleFilterChange}
+              aria-label="Admission to"
+            />
           </label>
         </div>
-        <div className="token-search-actions patient-records-search-actions">
-          <button type="submit" disabled={isSearching}>
-            {isSearching ? "Searching..." : "Search"}
+        <div className="nf-pr-actions token-search-actions patient-records-search-actions">
+          <button type="submit" className="nf-lq-btn nf-lq-btn--primary" disabled={isSearching}>
+            {isSearching ? "Searching…" : "Search"}
           </button>
           <button
             type="button"
-            className="btn-secondary"
+            className="nf-lq-btn"
             disabled={isDownloadingReport || !filters.date_from || !filters.date_to}
             onClick={handleDownloadBulkReport}
             title="CSV for all patients matching search filters in the date range"
           >
-            {isDownloadingReport ? "Preparing…" : "Download bulk report"}
+            {isDownloadingReport ? "Preparing…" : "Bulk report"}
           </button>
-          <button type="button" className="btn-secondary" onClick={handleClear}>
+          <button type="button" className="nf-lq-btn nf-lq-btn--ghost" onClick={handleClear}>
             Clear
           </button>
         </div>
@@ -558,10 +621,11 @@ export const PatientRecordsPage = () => {
       {searchError ? <p className="error-text">{searchError}</p> : null}
       {reportError ? <p className="error-text">{reportError}</p> : null}
 
-      <article className="card token-search-results-card patient-records-search-results">
-        <div className="patient-records-section-head">
+      {!record ? (
+      <article className="nf-panel nf-pr-panel patient-records-search-results nf-pr-modern-results">
+        <div className="nf-panel-head patient-records-section-head">
           <div>
-            <h3>Search Results</h3>
+            <h2 className="nf-panel-title">Search results</h2>
             <p className="page-subtitle">
               HIS = hospital visit only. {APP_NAME} = tracked in MongoDB. HIS + {APP_NAME} = both match.
             </p>
@@ -590,17 +654,49 @@ export const PatientRecordsPage = () => {
                   <th>Source</th>
                   <th>{APP_NAME}</th>
                   <th>Matches</th>
-                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {groupedPatients.map((row) => (
                   <tr
                     key={row.patient_id}
-                    className={row.patient_id === selectedPatientId ? "patient-records-row-active" : ""}
+                    className={`patient-records-clickable-row ${
+                      row.patient_id === selectedPatientId ? "patient-records-row-active" : ""
+                    }`.trim()}
+                    onClick={() => loadRecord(row.patient_id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        loadRecord(row.patient_id);
+                      }
+                    }}
                   >
-                    <td>{row.patient_id}</td>
-                    <td>{row.name || "--"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="patient-records-cell-link"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          loadRecord(row.patient_id);
+                        }}
+                      >
+                        {row.patient_id}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="patient-records-cell-link patient-records-cell-link--name"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          loadRecord(row.patient_id);
+                        }}
+                      >
+                        {row.name || "--"}
+                      </button>
+                    </td>
                     <td>{row.sex || "--"}</td>
                     <td>{formatDateOnly(row.dob)}</td>
                     <td>{row.i_reg_no || "--"}</td>
@@ -631,11 +727,6 @@ export const PatientRecordsPage = () => {
                     </td>
                     <td>{row.tracked ? `${row.lineloom_matches ?? 0} tracked` : "—"}</td>
                     <td>{row.match_count}</td>
-                    <td>
-                      <button type="button" onClick={() => loadRecord(row.patient_id)}>
-                        Open record
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -643,19 +734,26 @@ export const PatientRecordsPage = () => {
           </div>
         ) : null}
       </article>
+      ) : null}
 
-      {isRecordLoading ? <section className="page"><p>Loading patient record...</p></section> : null}
+      {isRecordLoading ? <p className="muted-inline">Loading patient record…</p> : null}
       {recordError ? <p className="error-text">{recordError}</p> : null}
 
       {record ? (
         <>
+          <div ref={recordDetailRef} id="patient-record-detail" className="patient-records-detail-anchor" />
+          <div className="nf-pr-back-bar">
+            <button type="button" className="nf-lq-btn nf-lq-btn--ghost" onClick={handleBackToSearch}>
+              ← Back to search
+            </button>
+          </div>
+          <article className="nf-panel nf-pr-panel patient-records-header-panel">
           <header className="detail-header patient-records-header">
             <div className="patient-hero">
-              <div className="patient-avatar">{getInitials(patient.name)}</div>
               <div>
                 <div className="patient-title-row">
                   <h2>{patient.name || `Patient ${patient.patient_id}`}</h2>
-                  <span className="patient-chip">Patient ID {patient.patient_id}</span>
+                  <span className="patient-meta-id">ID {patient.patient_id}</span>
                 </div>
                 <p className="patient-meta">
                   {patient.phone || "No phone"} | {patient.sex || "Sex unknown"} | DOB{" "}
@@ -685,153 +783,66 @@ export const PatientRecordsPage = () => {
               </div>
             </div>
             <div className="patient-records-header-meta">
-              <div className="patient-records-meta-card">
+              <div className="nf-inline-stat">
                 <span>Last seen</span>
                 <strong>{formatDateTime(summary.last_seen_at)}</strong>
               </div>
-              <div className="patient-records-meta-card">
+              <div className="nf-inline-stat">
                 <span>Latest token</span>
                 <strong>{summary.latest_token_id || "--"}</strong>
               </div>
               <button
                 type="button"
-                className="btn-secondary patient-records-download-btn"
+                className="nf-lq-btn patient-records-download-btn"
                 disabled={isDownloadingReport}
                 onClick={handleDownloadPatientReport}
                 title="CSV for this patient (optional: limit with admission dates above)"
               >
-                {isDownloadingReport ? "Preparing…" : "Download patient report"}
+                {isDownloadingReport ? "Preparing…" : "Download report"}
               </button>
             </div>
           </header>
 
-          <section className="summary-grid patient-records-summary-grid">
-            <article className="summary-card">
+          <section className="nf-stat-grid patient-records-summary-grid" aria-label="Patient summary">
+            <article className="summary-card nf-stat-card nf-stat-card--consult">
               <h4>Total visits</h4>
-              <p>{summary.total_visits ?? 0}</p>
+              <p className="nf-stat-value">{summary.total_visits ?? 0}</p>
+              <span className="nf-stat-caption">all encounters</span>
             </article>
-            <article className="summary-card">
-              <h4>Tracked encounters</h4>
-              <p>{summary.tracked_encounters ?? 0}</p>
+            <article className="summary-card nf-stat-card nf-stat-card--waiting">
+              <h4>Tracked</h4>
+              <p className="nf-stat-value">{summary.tracked_encounters ?? 0}</p>
+              <span className="nf-stat-caption">with {APP_NAME} token</span>
             </article>
-            <article className="summary-card">
-              <h4>Active encounters</h4>
-              <p>{summary.active_encounters ?? 0}</p>
+            <article className="summary-card nf-stat-card nf-stat-card--treatment">
+              <h4>Active</h4>
+              <p className="nf-stat-value">{summary.active_encounters ?? 0}</p>
+              <span className="nf-stat-caption">in progress</span>
             </article>
-            <article className="summary-card">
+            <article className="summary-card nf-stat-card nf-stat-card--done">
               <h4>Completed</h4>
-              <p>{summary.completed_encounters ?? 0}</p>
-            </article>
-            <article className="summary-card">
-              <h4>HIS only visits</h4>
-              <p>{summary.his_only_visits ?? 0}</p>
-            </article>
-            <article className="summary-card">
-              <h4>Departments visited</h4>
-              <p>{summary.departments_visited ?? 0}</p>
+              <p className="nf-stat-value">{summary.completed_encounters ?? 0}</p>
+              <span className="nf-stat-caption">finished visits</span>
             </article>
           </section>
-
-          <article className="card patient-records-mongo-card">
-            <div className="patient-records-section-head">
-              <div>
-                <h3>{APP_NAME} patient record (MongoDB)</h3>
-                <p className="page-subtitle">
-                  Complete token and time-tracking data stored in MongoDB for this patient.
-                </p>
-              </div>
-            </div>
-            <DetailKv
-              items={[
-                { label: "Patient ID (iPat_id)", value: patient.patient_id },
-                { label: "Master reg (iReg_No)", value: patient.patient_reg_no || patient.i_reg_no },
-                { label: "Name", value: patient.name },
-                { label: "Phone", value: patient.phone },
-                { label: "Sex", value: patient.sex },
-                { label: "DOB", value: formatDateOnly(patient.dob) },
-                { label: "Latest visit", value: patient.latest_visit_id },
-                { label: "Latest department", value: patient.latest_department },
-                { label: "Latest status", value: patient.latest_status },
-                { label: "Last seen", value: formatDateTime(patient.last_seen_at) },
-                { label: "Tokens in MongoDB", value: String(patient.mongodb_token_count ?? mongoTokens.length) }
-              ]}
-            />
-            {!mongoTokens.length ? (
-              <p className="muted-inline" style={{ marginTop: 12 }}>
-                No {APP_NAME} tokens exist in MongoDB for this patient yet. HIS-only visits appear in visit
-                history below.
-              </p>
-            ) : (
-              <div className="patient-records-data-table-wrap" style={{ marginTop: 16 }}>
-                <table className="patient-records-data-table">
-                  <thead>
-                    <tr>
-                      <th>Token</th>
-                      <th>OP / IP reg</th>
-                      <th>Master reg</th>
-                      <th>Department</th>
-                      <th>Queue #</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th>Workflow</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mongoTokens.map((row) => {
-                      const tt = row.time_tracking ?? {};
-                      const workflow = [
-                        tt.consult_end ? "Consult" : null,
-                        tt.pharmacy_logs?.length ? "Pharmacy" : null,
-                        tt.lab_logs?.length ? "Lab" : null,
-                        tt.billing_payments?.length ? "Billing" : null,
-                        tt.treatment_logs?.length ? "Treatment" : null
-                      ].filter(Boolean);
-                      return (
-                        <tr key={row.token_id}>
-                          <td>
-                            <strong>{row.token_id}</strong>
-                          </td>
-                          <td>{row.visit_id || "—"}</td>
-                          <td>{row.patient_reg_no || "—"}</td>
-                          <td>{row.department || "—"}</td>
-                          <td>{row.department_queue_no ?? "—"}</td>
-                          <td>{row.status || "—"}</td>
-                          <td>
-                            <small>{formatDateTime(row.created_at)}</small>
-                          </td>
-                          <td>{workflow.length ? workflow.join(", ") : "—"}</td>
-                          <td>
-                            <Link
-                              to={`/tokens/${encodeURIComponent(row.token_id)}`}
-                              className="patient-records-link"
-                            >
-                              Open token
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </article>
 
           <section className="patient-records-layout">
-            <article className="card table-card patient-records-history-card">
-              <div className="patient-records-section-head">
+            <article className="nf-panel nf-pr-panel table-card patient-records-history-card">
+              <div className="nf-panel-head patient-records-section-head">
                 <div>
-                  <h3>Visit History</h3>
-                  <p className="page-subtitle">
-                    Tracked token episodes appear with workflow metrics; HIS-only visits remain visible for context.
+                  <h2 className="nf-panel-title">Visit history</h2>
+                  <p className="nf-panel-sub">
+                    All encounters — click a row for detail, or open the full token page when available.
                   </p>
                 </div>
               </div>
+              <div className="nf-panel-body">
               {!record?.encounters?.length ? (
                 <p className="muted-inline">No visit history is available for this patient.</p>
               ) : (
-                <table className="patient-records-history-table">
+                <div className="token-search-table-wrap">
+                <table className="patient-records-history-table token-search-table">
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -850,12 +861,20 @@ export const PatientRecordsPage = () => {
                     {record.encounters.map((encounter) => (
                       <tr
                         key={encounter.encounter_key}
-                        className={`clickable-row ${
+                        className={`clickable-row patient-records-clickable-row ${
                           selectedEncounter?.encounter_key === encounter.encounter_key
                             ? "patient-records-row-active"
                             : ""
                         }`.trim()}
-                        onClick={() => setSelectedEncounterKey(encounter.encounter_key)}
+                        onClick={() => selectEncounter(encounter.encounter_key)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            selectEncounter(encounter.encounter_key);
+                          }
+                        }}
                       >
                         <td>
                           <div>{formatDateOnly(encounter.occurred_at || encounter.admission)}</div>
@@ -892,42 +911,53 @@ export const PatientRecordsPage = () => {
                           </div>
                         </td>
                         <td>{encounter.consult_note ? "Available" : "--"}</td>
-                        <td>
+                        <td onClick={(event) => event.stopPropagation()}>
                           {encounter.token_id ? (
                             <Link
-                              to={`/tokens/${encodeURIComponent(encounter.token_id)}`}
+                              to={tokenDetailPath(encounter.token_id)}
                               className="patient-records-link"
-                              onClick={(event) => event.stopPropagation()}
                             >
-                              Open token
+                              Full visit
                             </Link>
                           ) : (
-                            <span className="patient-records-link patient-records-link-disabled">No token</span>
+                            <button
+                              type="button"
+                              className="patient-records-link patient-records-link--secondary"
+                              onClick={() => selectEncounter(encounter.encounter_key)}
+                            >
+                              View detail
+                            </button>
                           )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
+              </div>
             </article>
 
-            <aside className="card patient-records-detail-card">
+            <aside ref={visitDetailRef} className="nf-panel patient-records-detail-card">
               {selectedEncounter ? (
                 <>
                   <div className="patient-records-section-head">
                     <div>
                       <h3>Visit Detail</h3>
                       <p className="page-subtitle">
-                        {selectedEncounter.visit_id || "Unknown visit"} {selectedEncounter.token_id ? `| ${selectedEncounter.token_id}` : ""}
+                        Click a visit row on the left, or open the full token page for workflow actions.
+                      </p>
+                      <p className="page-subtitle">
+                        {selectedEncounter.visit_id || "Unknown visit"}
+                        {selectedEncounter.token_id ? ` · ${selectedEncounter.token_id}` : ""}
                       </p>
                     </div>
                     {selectedEncounter.token_id ? (
                       <Link
-                        to={`/tokens/${encodeURIComponent(selectedEncounter.token_id)}`}
+                        to={tokenDetailPath(selectedEncounter.token_id)}
                         className="patient-records-link"
                       >
-                        Open token
+                        Full visit page
                       </Link>
                     ) : null}
                   </div>

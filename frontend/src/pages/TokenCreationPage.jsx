@@ -213,63 +213,83 @@ export const TokenCreationPage = () => {
   };
 
   return (
-    <section className="page cc-page token-create-page">
+    <section className="page cc-page token-create-page nf-tc-invoice-ui">
       <ClinicalPageHeader
         title="Create token"
         subtitle="Search HIS patients, select a visit, and start a new queue token for the department."
       />
-      <form className="card token-search-card token-search-filters" onSubmit={handleSearch}>
-        <div className="token-search-fields">
-          <label className="token-search-field">
-            <span>Patient name</span>
+      <form className="nf-lq-toolbar token-create-search nf-tc-invoice-toolbar" onSubmit={handleSearch}>
+        <div className="nf-tc-invoice-card-head">
+          <span className="nf-tc-invoice-card-head-title">Patient search</span>
+          <div className="nf-tc-invoice-card-head-tabs" aria-hidden="true">
+            <span className="nf-tc-invoice-tab nf-tc-invoice-tab--active">
+              All patients
+              <span className="nf-tc-invoice-tab-badge">{filteredResults.length}</span>
+            </span>
+          </div>
+        </div>
+        <div className="nf-lq-toolbar-fields nf-lq-toolbar-fields--token-create">
+          <div className="nf-lq-field">
+            <label htmlFor="tc_patient_name">Patient name</label>
             <input
+              id="tc_patient_name"
               type="text"
               name="patient_name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Contains match"
+              placeholder="Patient name"
+              className="nf-lq-input"
               autoComplete="off"
             />
-          </label>
-          <label className="token-search-field">
-            <span>IP / OP reg no / iReg_No</span>
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="tc_reg_no">IP / OP reg no / iReg_No</label>
             <input
+              id="tc_reg_no"
               type="text"
               name="reg_no"
               value={regNo}
               onChange={(e) => setRegNo(e.target.value)}
-              placeholder="e.g. IP07004303 or 6028045"
+              placeholder="IP / OP reg no / iReg_No"
+              className="nf-lq-input"
               autoComplete="off"
             />
-          </label>
-          <label className="token-search-field">
-            <span>Admission from</span>
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="tc_date_from">Admission from</label>
             <input
+              id="tc_date_from"
               type="date"
               name="date_from"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
+              className="nf-lq-input"
             />
-          </label>
-          <label className="token-search-field">
-            <span>Admission to</span>
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="tc_date_to">Admission to</label>
             <input
+              id="tc_date_to"
               type="date"
               name="date_to"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
+              className="nf-lq-input"
             />
-          </label>
-        </div>
-        <div className="token-search-actions">
-          <button type="submit" disabled={isSearching}>
-            {isSearching ? "Searching..." : "Search"}
-          </button>
+          </div>
+          <div className="nf-lq-field nf-lq-field--action">
+            <span className="nf-lq-field-action-label" aria-hidden="true">
+              Search
+            </span>
+            <button type="submit" className="nf-lq-btn nf-lq-btn--primary" disabled={isSearching}>
+              {isSearching ? "Searching…" : "Search"}
+            </button>
+          </div>
         </div>
       </form>
       {error ? <p className="error-text">{error}</p> : null}
 
-      <article className="card token-search-results-card">
+      <article className="card token-search-results-card nf-tc-invoice-table-card">
         <div className="token-search-table-wrap">
           <table className="token-search-table">
             <thead>
@@ -379,7 +399,7 @@ export const TokenCreationPage = () => {
                     <td>{patient.dept_id ?? patient.department ?? "-"}</td>
                     <td>{patient.dept_name ?? "-"}</td>
                     <td>
-                      <button type="button" onClick={() => handleOpenCreateModal(patient)}>
+                      <button type="button" className="nf-tc-token-btn" onClick={() => handleOpenCreateModal(patient)}>
                         Create Token
                       </button>
                     </td>
@@ -398,8 +418,8 @@ export const TokenCreationPage = () => {
       </article>
 
       {selectedPatient ? (
-        <section className="modal-overlay">
-          <article className="modal-card token-modal">
+        <section className="modal-overlay nf-tc-modal-overlay">
+          <article className="modal-card token-modal nf-tc-modal">
             <div className="token-modal-header">
               <div>
                 <h3>Create Token</h3>

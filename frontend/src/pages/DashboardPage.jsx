@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
+import { QueuePatientCard } from "../components/queue/QueuePatientCard.jsx";
 import { RevertConfirmModal } from "../components/RevertConfirmModal";
 import { fetchActiveDepartments } from "../services/departmentService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
@@ -11,8 +12,7 @@ import {
   fetchHisDepartments
 } from "../services/dashboardService";
 import { fetchAlerts } from "../services/alertService";
-import { fetchIntelligenceSummary } from "../services/intelligenceService";
-import { tokenDetailPath } from "../utils/tokenPaths.js";
+import { goToTokenDetail } from "../utils/tokenPaths.js";
 import {
   completeVisitAfterConsultRequest,
   endCareRequest,
@@ -41,19 +41,6 @@ const getTodayDefaultFilters = () => {
   };
 };
 
-const formatDateTime = (value = null) => {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-  return date.toLocaleString();
-};
-
-const normalizeTokenId = (value = "") => String(value ?? "").replace(/^\/+|\/+$/g, "");
-
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
@@ -72,7 +59,6 @@ export const DashboardPage = () => {
   const [stepBackRow, setStepBackRow] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [quickAlerts, setQuickAlerts] = useState([]);
-  const [intelligenceBrief, setIntelligenceBrief] = useState(null);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -209,16 +195,14 @@ export const DashboardPage = () => {
     setIsLoading(true);
     setError("");
     try {
-      const [summaryData, tokenRows, alerts, intel] = await Promise.all([
+      const [summaryData, tokenRows, alerts] = await Promise.all([
         fetchDashboardSummary(filters),
         fetchDashboardTokens(filters),
-        fetchAlerts({ limit: 5, unacknowledged_only: 1 }).catch(() => []),
-        fetchIntelligenceSummary().catch(() => null)
+        fetchAlerts({ limit: 5, unacknowledged_only: 1 }).catch(() => [])
       ]);
       setSummary(summaryData);
       setRows(tokenRows);
       setQuickAlerts(Array.isArray(alerts) ? alerts : []);
-      setIntelligenceBrief(intel);
     } catch (loadError) {
       setError(loadError?.message ?? "Failed to load dashboard");
     } finally {
@@ -340,76 +324,11 @@ export const DashboardPage = () => {
   };
 
   return (
-    <section className="page cc-page">
+    <section className="page cc-page queue-layout-page nf-overview-page nf-overview-modern">
       <ClinicalPageHeader
         title="Patient queue overview"
         subtitle="Track waiting, consulting, treatment, and completion across departments for the selected date range."
       />
-
-      {intelligenceBrief?.stats ? (
-        <div className="intel-strip card">
-          <p className="intel-strip-text">
-            <strong>7-day insight:</strong>{" "}
-            {intelligenceBrief.stats.anomaly
-              ? intelligenceBrief.stats.anomaly_reason
-              : `Mean daily average wait ${intelligenceBrief.stats.mean_7d_daily_avg_wait ?? "—"} min · naive forecast next day ${intelligenceBrief.forecast?.expected_avg_wait_minutes_next_day ?? "—"} min`}
-          </p>
-        </div>
-      ) : null}
-
-      {!isLoading && !error ? (
-        <div
-          className={`action-legend card${intelligenceBrief?.stats ? " action-legend--below-insight" : ""}`}
-          role="note"
-          aria-label="Actions column abbreviations"
-        >
-          <p className="action-legend-heading">Action shortcuts</p>
-          <p className="action-legend-body">
-            <span className="action-legend-item">
-              <abbr className="action-legend-key" title="Start Consulting">
-                SC
-              </abbr>
-              <span className="action-legend-label">Start Consulting</span>
-            </span>
-            <span className="action-legend-sep" aria-hidden>
-              ·
-            </span>
-            <span className="action-legend-item">
-              <abbr className="action-legend-key" title="End Consulting">
-                EC
-              </abbr>
-              <span className="action-legend-label">End Consulting</span>
-            </span>
-            <span className="action-legend-sep" aria-hidden>
-              ·
-            </span>
-            <span className="action-legend-item">
-              <abbr className="action-legend-key" title="Start Treatment">
-                ST
-              </abbr>
-              <span className="action-legend-label">Start Treatment</span>
-            </span>
-            <span className="action-legend-sep" aria-hidden>
-              ·
-            </span>
-            <span className="action-legend-item">
-              <abbr className="action-legend-key" title="End Treatment">
-                ET
-              </abbr>
-              <span className="action-legend-label">End Treatment</span>
-            </span>
-            <span className="action-legend-sep" aria-hidden>
-              ·
-            </span>
-            <span className="action-legend-item">
-              <span className="action-legend-key action-legend-key--back" title="Revert to an earlier journey step">
-                ←
-              </span>
-              <span className="action-legend-label">Revert to an earlier step</span>
-            </span>
-          </p>
-        </div>
-      ) : null}
 
       {quickAlerts.length ? (
         <div className="alert-strip" role="status">
@@ -424,231 +343,144 @@ export const DashboardPage = () => {
         </div>
       ) : null}
 
-      <form className="card filter-grid" onSubmit={handleApplyFilters}>
-        <input
-          type="datetime-local"
-          name="from"
-          value={filters.from}
-          onChange={handleFilterChange}
-          placeholder="From"
-        />
-        <input
-          type="datetime-local"
-          name="to"
-          value={filters.to}
-          onChange={handleFilterChange}
-          placeholder="To"
-        />
-        <input
-          type="text"
-          name="search"
-          value={filters.search}
-          onChange={handleFilterChange}
-          placeholder="Search name, token id, visit id"
-        />
-        <select name="department" value={filters.department} onChange={handleFilterChange}>
-          <option value="">All departments</option>
-          {departmentOptions.map((department) => (
-            <option key={department} value={department}>
-              {department}
-            </option>
-          ))}
-        </select>
-        <button type="submit" disabled={isSubmitting}>
-          Apply Filters
-        </button>
+      <form className="nf-lq-toolbar nf-overview-toolbar" onSubmit={handleApplyFilters}>
+        <div className="nf-panel-head">
+          <h2 className="nf-panel-title">Filters</h2>
+          <p className="nf-panel-sub">Date range, search, and department for the queue below.</p>
+        </div>
+        <div className="nf-lq-toolbar-fields nf-lq-toolbar-fields--overview">
+          <div className="nf-lq-field">
+            <label htmlFor="dash_from">From</label>
+            <input
+              id="dash_from"
+              type="datetime-local"
+              name="from"
+              value={filters.from}
+              onChange={handleFilterChange}
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="dash_to">To</label>
+            <input
+              id="dash_to"
+              type="datetime-local"
+              name="to"
+              value={filters.to}
+              onChange={handleFilterChange}
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="dash_search">Search</label>
+            <input
+              id="dash_search"
+              type="text"
+              name="search"
+              value={filters.search}
+              onChange={handleFilterChange}
+              placeholder="Name, token id, visit id"
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="dash_dept">Department</label>
+            <select
+              id="dash_dept"
+              name="department"
+              value={filters.department}
+              onChange={handleFilterChange}
+              className="nf-lq-input"
+            >
+              <option value="">All departments</option>
+              {departmentOptions.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="nf-lq-toolbar-actions">
+          <button type="submit" className="nf-lq-btn nf-lq-btn--primary" disabled={isSubmitting}>
+            {isSubmitting ? "Applying…" : "Apply filters"}
+          </button>
+        </div>
       </form>
 
-      <div className="summary-grid">
-        <article className="summary-card">
-          <h4>Waiting Patients</h4>
-          <p>{summary?.waiting_patient_count ?? 0}</p>
+      <div className="nf-stat-grid summary-grid" aria-label="Queue summary">
+        <article className="summary-card nf-stat-card nf-stat-card--waiting">
+          <h4>Waiting</h4>
+          <p className="nf-stat-value">{summary?.waiting_patient_count ?? 0}</p>
+          <span className="nf-stat-caption">patients in queue</span>
         </article>
-        <article className="summary-card">
-          <h4>Patients in Consulting</h4>
-          <p>{summary?.patient_in_consulting_count ?? 0}</p>
+        <article className="summary-card nf-stat-card nf-stat-card--consult">
+          <h4>In consult</h4>
+          <p className="nf-stat-value">{summary?.patient_in_consulting_count ?? 0}</p>
+          <span className="nf-stat-caption">active consultations</span>
         </article>
-        <article className="summary-card">
-          <h4>Patients in Treatment</h4>
-          <p>{summary?.patient_in_treatment_count ?? 0}</p>
+        <article className="summary-card nf-stat-card nf-stat-card--treatment">
+          <h4>In treatment</h4>
+          <p className="nf-stat-value">{summary?.patient_in_treatment_count ?? 0}</p>
+          <span className="nf-stat-caption">on-site care</span>
         </article>
-        <article className="summary-card">
-          <h4>Completed Patients</h4>
-          <p>{summary?.patient_completed_count ?? 0}</p>
+        <article className="summary-card nf-stat-card nf-stat-card--done">
+          <h4>Completed</h4>
+          <p className="nf-stat-value">{summary?.patient_completed_count ?? 0}</p>
+          <span className="nf-stat-caption">visits finished</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--total">
+          <h4>Total today</h4>
+          <p className="nf-stat-value">{summary?.total_patients_today ?? 0}</p>
+          <span className="nf-stat-caption">tokens in range</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--avg-wait">
+          <h4>Avg wait</h4>
+          <p className="nf-stat-value">
+            {summary?.avg_waiting_time_minutes != null
+              ? `${Math.round(summary.avg_waiting_time_minutes)}m`
+              : "—"}
+          </p>
+          <span className="nf-stat-caption">minutes average</span>
         </article>
       </div>
 
       {error ? <p className="error-text">{error}</p> : null}
-      {isLoading ? <p>Loading dashboard rows...</p> : null}
+      {isLoading ? <p className="muted-inline">Loading queue…</p> : null}
       {!isLoading && !error && !rows.length ? (
-        <p>No patient tokens available for selected range.</p>
+        <p className="muted-inline">No patient tokens available for selected range.</p>
       ) : null}
 
       {!isLoading && rows.length ? (
-        <article className="card table-card">
-          <table>
-            <thead>
-              <tr>
-                <th className="col-token-no">Token #</th>
-                <th>Name</th>
-                <th>Department</th>
-                <th className="col-tat">Waiting TAT</th>
-                <th className="col-tat">Consult TAT</th>
-                <th className="col-tat">Treatment TAT</th>
-                <th className="col-tat">Overall TAT</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.token_id}
-                  className="clickable-row"
-                  onClick={() => {
-                    const cleanId = normalizeTokenId(row.token_id);
-                    if (!cleanId) {
-                      return;
-                    }
-                    navigate(tokenDetailPath(cleanId));
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      const cleanId = normalizeTokenId(row.token_id);
-                      if (!cleanId) {
-                        return;
-                      }
-                      navigate(tokenDetailPath(cleanId));
-                    }
-                  }}
-                >
-                  <td className="col-token-no">
-                    <span className="token-queue-no" title={`${row.department} queue number`}>
-                      #{row.department_queue_no ?? "—"}
-                    </span>
-                    <span className="token-queue-id" title={row.token_id}>
-                      {row.token_id}
-                    </span>
-                  </td>
-                  <td>{row.name}</td>
-                  <td>{row.department}</td>
-                  <td className="col-tat">{formatSeconds(getTatSeconds(row, "waiting"))}</td>
-                  <td className="col-tat">
-                    <div className="tat-cell">
-                      <strong>{formatSeconds(getTatSeconds(row, "consult"))}</strong>
-                      {row.consulting_tat_minutes != null ? (
-                        <div className="tat-hover">
-                          <span className="info-icon" title="Show consult start/end">
-                            i
-                          </span>
-                          <div className="tat-tooltip">
-                            <div>Start: {formatDateTime(row.consult_start)}</div>
-                            <div>End: {formatDateTime(row.consult_end)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="col-tat">
-                    <div className="tat-cell">
-                      <strong>{formatSeconds(getTatSeconds(row, "treatment"))}</strong>
-                      {row.treatment_tat_minutes != null ? (
-                        <div className="tat-hover">
-                          <span className="info-icon" title="Show treatment start/end">
-                            i
-                          </span>
-                          <div className="tat-tooltip">
-                            <div>Start: {formatDateTime(row.treatment_start)}</div>
-                            <div>End: {formatDateTime(row.treatment_end)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="col-tat">
-                    {formatSeconds(
-                      ["waiting", "consult", "lab_wait", "lab_test", "treatment"]
-                        .map((k) => getTatSeconds(row, k))
-                        .filter((v) => v != null)
-                        .reduce((sum, v) => sum + v, 0)
-                    )}
-                  </td>
-                  <td>
-                    <span className={`status-chip status-${String(row.status).toLowerCase()}`}>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td
-                    className="token-actions-cell"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <div className="action-group" onClick={(event) => event.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openConsultStartModal(row)}
-                        disabled={isSubmitting || row.status !== "WAITING"}
-                        title="Start Consulting"
-                        aria-label="Start Consulting"
-                      >
-                        <span className="action-icon">SC</span>
-                      </button>
-                      {row.status === "CONSULTING" && !row.consult_end ? (
-                        <button
-                          type="button"
-                          onClick={() => openConfirmAction(row.token_id, "end_consult")}
-                          disabled={isSubmitting}
-                          title="End Consulting"
-                          aria-label="End Consulting"
-                        >
-                          <span className="action-icon">EC</span>
-                        </button>
-                      ) : null}
-                      {row.status === "CONSULTING" && row.consult_end ? (
-                        <button
-                          type="button"
-                          onClick={() => openConfirmAction(row.token_id, "start_treatment")}
-                          disabled={isSubmitting}
-                          title="Start Treatment"
-                          aria-label="Start Treatment"
-                        >
-                          <span className="action-icon">ST</span>
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => openConfirmAction(row.token_id, "end_treatment")}
-                        disabled={isSubmitting || row.status !== "IN_TREATMENT"}
-                        title="End Treatment"
-                        aria-label="End Treatment"
-                      >
-                        <span className="action-icon">ET</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="action-back"
-                        onClick={() => openRevertModal(row)}
-                        disabled={
-                          isSubmitting ||
-                          row.status === "WAITING" ||
-                          !canRevertVisit(row)
-                        }
-                        title="Revert to an earlier journey step"
-                        aria-label="Revert to an earlier journey step"
-                      >
-                        <span className="action-icon" aria-hidden>
-                          ←
-                        </span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
+        <div className="nf-overview-queue-panel">
+          <div className="nf-lq-list-head">
+            <div>
+              <h2>Patient queue</h2>
+              <p>Click a card to open the full visit.</p>
+            </div>
+            <p>
+              <strong>{rows.length}</strong> token{rows.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="nf-lq-list">
+            {rows.map((row) => (
+              <QueuePatientCard
+                key={row.token_id}
+                row={row}
+                isSubmitting={isSubmitting}
+                formatSeconds={formatSeconds}
+                getTatSeconds={getTatSeconds}
+                canRevert={canRevertVisit(row)}
+                onOpenDetail={(r) => goToTokenDetail(navigate, r.token_id)}
+                onStartConsult={openConsultStartModal}
+                onEndConsult={(r) => openConfirmAction(r.token_id, "end_consult")}
+                onStartTreatment={(r) => openConfirmAction(r.token_id, "start_treatment")}
+                onEndTreatment={(r) => openConfirmAction(r.token_id, "end_treatment")}
+                onRevert={openRevertModal}
+              />
+            ))}
+          </div>
+        </div>
       ) : null}
 
       <RevertConfirmModal

@@ -1,0 +1,569 @@
+/**
+ * Patient Visit (Token Detail) — Modernize UI (visual only).
+ * Scoped to .nf-visit-modern on ClinicalTokenDetailLayout.
+ */
+
+:root {
+  --vis-primary: #5d87ff;
+  --vis-primary-soft: #ecf2ff;
+  --vis-teal: #49beff;
+  --vis-teal-soft: #ecf2ff;
+  --vis-orange-soft: #fef5e5;
+  --vis-purple-soft: #f3e8ff;
+  --vis-page: #f6f9fc;
+  --vis-card: #ffffff;
+  --vis-border: #ebf1f6;
+  --vis-text: #2a3547;
+  --vis-muted: #7c8fac;
+  --vis-font: "Plus Jakarta Sans", "DM Sans", sans-serif;
+  --vis-mono: "Space Mono", monospace;
+}
+
+body.cc-theme:has(.nf-visit-modern) .cc-app-main {
+  background: var(--vis-page) !important;
+  padding: 24px 28px 36px !important;
+}
+
+body.cc-theme:has(.nf-visit-modern) .cc-topbar-title {
+  visibility: hidden;
+}
+
+body.cc-theme .nf-visit-modern {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  width: 100%;
+}
+
+/* —— Patient hero header —— */
+body.cc-theme .nf-visit-modern .cc-patient-header {
+  background: linear-gradient(135deg, #ecf2ff 0%, #e8f4fd 48%, #f0f7ff 100%);
+  border: 1px solid #dce7f7;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(93, 135, 255, 0.07);
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
+  align-items: center !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-header::after {
+  content: "";
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(93, 135, 255, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-hero > div::before {
+  content: "Overview · Patient visit";
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vis-muted);
+  font-family: var(--vis-font);
+  margin-bottom: 8px;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-name {
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  color: var(--vis-text) !important;
+  font-family: var(--vis-font) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-meta-grid {
+  gap: 6px 20px !important;
+  margin-top: 12px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-meta-item {
+  font-size: 12px !important;
+  color: var(--vis-muted) !important;
+  font-family: var(--vis-font) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-meta-item::after {
+  display: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-patient-meta-item strong {
+  font-family: var(--vis-mono) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--vis-text) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge-row {
+  margin-top: 14px !important;
+  gap: 8px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge {
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  padding: 5px 12px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge--primary {
+  background: var(--vis-teal-soft) !important;
+  color: #4570ea !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge--neutral {
+  background: var(--vis-primary-soft) !important;
+  color: var(--vis-primary) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge--warning {
+  background: var(--vis-orange-soft) !important;
+  color: #d97706 !important;
+}
+
+/* —— Action buttons —— */
+body.cc-theme .nf-visit-modern .cc-actions {
+  gap: 8px !important;
+  z-index: 1;
+}
+
+body.cc-theme .nf-visit-modern .cc-btn {
+  border: 1px solid var(--vis-border) !important;
+  background: var(--vis-card) !important;
+  color: var(--vis-text) !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  font-family: var(--vis-font) !important;
+  padding: 9px 16px !important;
+  box-shadow: 0 1px 2px rgba(42, 53, 71, 0.04);
+}
+
+body.cc-theme .nf-visit-modern .cc-btn:hover:not(:disabled) {
+  border-color: #d6e4ff !important;
+  background: #fafbfd !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-btn--success {
+  background: var(--vis-primary) !important;
+  border-color: var(--vis-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(93, 135, 255, 0.35) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-btn--success:hover:not(:disabled) {
+  background: #4570ea !important;
+  border-color: #4570ea !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-btn--ghost {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--vis-muted) !important;
+  box-shadow: none !important;
+}
+
+body.cc-theme .nf-visit-modern .error-text {
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: #dc2626 !important;
+  font-size: 13px;
+  margin: 0 !important;
+}
+
+/* —— KPI stat row —— */
+body.cc-theme .nf-visit-modern .cc-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 1100px) {
+  body.cc-theme .nf-visit-modern .cc-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  body.cc-theme .nf-visit-modern .cc-kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  justify-items: center;
+  text-align: center;
+  background: var(--vis-card) !important;
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 18px rgba(93, 135, 255, 0.06) !important;
+  padding: 20px 16px 16px !important;
+  min-height: 140px;
+  overflow: visible !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi::before {
+  display: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi-icon {
+  grid-row: 1;
+  font-size: 0 !important;
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 12px !important;
+  margin-bottom: 10px !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 24px 24px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi:nth-child(1) .cc-kpi-icon {
+  background-color: var(--vis-orange-soft) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffae1f' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E") !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi:nth-child(2) .cc-kpi-icon {
+  background-color: var(--vis-primary-soft) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%235d87ff' stroke-width='2'%3E%3Cpath d='M11 2v2M11 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 11h2M20 11h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/svg%3E") !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi:nth-child(3) .cc-kpi-icon {
+  background-color: var(--vis-purple-soft) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23763ebd' stroke-width='2'%3E%3Cpath d='M22 12h-4l-3 9L9 3l-3 9H2'/%3E%3C/svg%3E") !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi:nth-child(4) .cc-kpi-icon {
+  background-color: var(--vis-teal-soft) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%235d87ff' stroke-width='2'%3E%3Cpath d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/%3E%3Cpath d='m9 11 3 3L22 4'/%3E%3C/svg%3E") !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi-label {
+  grid-row: 2;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--vis-muted) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: var(--vis-font) !important;
+  margin: 0 !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi-value {
+  grid-row: 3;
+  font-family: var(--vis-mono) !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: var(--vis-text) !important;
+  margin: 4px 0 !important;
+  line-height: 1.1 !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-kpi-sub {
+  grid-row: 4;
+  font-size: 11px !important;
+  color: #a8b5c9 !important;
+  font-family: var(--vis-mono) !important;
+  margin: 0 !important;
+  line-height: 1.4;
+}
+
+/* —— Main grid —— */
+body.cc-theme .nf-visit-modern .cc-grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+body.cc-theme .nf-visit-modern .cc-col-8 {
+  grid-column: span 8;
+}
+
+body.cc-theme .nf-visit-modern .cc-col-4 {
+  grid-column: span 4;
+}
+
+@media (max-width: 1024px) {
+  body.cc-theme .nf-visit-modern .cc-col-8,
+  body.cc-theme .nf-visit-modern .cc-col-4 {
+    grid-column: span 12;
+  }
+}
+
+/* —— Cards —— */
+body.cc-theme .nf-visit-modern .cc-card {
+  background: var(--vis-card) !important;
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 18px rgba(93, 135, 255, 0.06) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .nf-visit-modern .cc-card-header {
+  padding: 18px 22px 14px !important;
+  border-bottom: 1px solid var(--vis-border) !important;
+  background: #fafbfd !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-card-title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: var(--vis-text) !important;
+  font-family: var(--vis-font) !important;
+  margin: 0 !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-card-sub {
+  font-size: 12px !important;
+  color: var(--vis-muted) !important;
+  margin: 4px 0 0 !important;
+  font-family: var(--vis-font) !important;
+}
+
+/* —— Log toolbar & tables —— */
+body.cc-theme .nf-visit-modern .cc-log-toolbar {
+  padding: 16px 22px 0 !important;
+  border: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-log-search {
+  width: 100%;
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 10px !important;
+  background: #f8fafd !important;
+  padding: 11px 14px 11px 40px !important;
+  font-size: 14px !important;
+  font-family: var(--vis-font) !important;
+  color: var(--vis-text) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: 14px center !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-log-search:focus {
+  border-color: var(--vis-primary) !important;
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.12) !important;
+  outline: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-log-section {
+  padding: 16px 22px 0 !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-log-section:last-child {
+  padding-bottom: 22px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-log-section .cc-card-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--vis-text) !important;
+  margin-bottom: 10px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid-wrap {
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  background: var(--vis-card) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid thead {
+  background: #f8fafc !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid th {
+  padding: 12px 14px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: var(--vis-muted) !important;
+  border-bottom: 1px solid var(--vis-border) !important;
+  font-family: var(--vis-font) !important;
+  background: #f8fafc !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid td {
+  padding: 11px 14px !important;
+  border-bottom: 1px solid #f2f6fa !important;
+  color: var(--vis-text) !important;
+  font-family: var(--vis-mono) !important;
+  font-size: 12px !important;
+  vertical-align: middle;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid tbody tr:hover td {
+  background: #fafbfd !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-data-grid tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-empty {
+  padding: 20px 14px !important;
+  text-align: center;
+  color: var(--vis-muted) !important;
+  font-family: var(--vis-font) !important;
+  font-size: 13px !important;
+}
+
+/* —— Patient journey —— */
+body.cc-theme .nf-visit-modern .cc-journey {
+  padding: 18px 20px 22px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step {
+  padding-left: 36px !important;
+  margin-bottom: 14px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step::before {
+  left: 11px !important;
+  width: 2px !important;
+  background: #e2e8f0 !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-dot {
+  width: 24px !important;
+  height: 24px !important;
+  left: 0 !important;
+  border: 3px solid var(--vis-card) !important;
+  box-shadow: 0 0 0 2px #e2e8f0 !important;
+  background: #cbd5e1 !important;
+  font-size: 11px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.done .cc-journey-dot {
+  background: var(--vis-primary, #49beff) !important;
+  box-shadow: 0 0 0 2px rgba(19, 222, 185, 0.35) !important;
+  color: #fff !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.active .cc-journey-dot {
+  background: var(--vis-primary) !important;
+  box-shadow: 0 0 0 2px rgba(93, 135, 255, 0.35) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.kind-pharmacy .cc-journey-dot {
+  background: #ffae1f !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.kind-lab .cc-journey-dot {
+  background: #49beff !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.kind-billing .cc-journey-dot {
+  background: #763ebd !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-body {
+  background: #f8fafd !important;
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 10px !important;
+  padding: 12px 14px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-body strong {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--vis-text) !important;
+  font-family: var(--vis-font) !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-duration {
+  font-family: var(--vis-mono) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--vis-primary) !important;
+  margin-top: 4px !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-range {
+  font-family: var(--vis-mono) !important;
+  font-size: 11px !important;
+  color: var(--vis-muted) !important;
+  margin-top: 4px !important;
+}
+
+/* Modals (TokenDetailPage overlays) */
+body.cc-theme:has(.nf-visit-modern) .modal-overlay {
+  background: rgba(42, 53, 71, 0.35) !important;
+  backdrop-filter: blur(4px);
+}
+
+body.cc-theme:has(.nf-visit-modern) .consult-modal {
+  border-radius: 16px !important;
+  border: 1px solid var(--vis-border) !important;
+  box-shadow: 0 24px 48px rgba(42, 53, 71, 0.16) !important;
+  padding: 24px !important;
+}
+
+body.cc-theme:has(.nf-visit-modern) .consult-modal-header h3 {
+  font-family: var(--vis-font) !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: var(--vis-text) !important;
+}
+
+body.cc-theme:has(.nf-visit-modern) .consult-modal-form select {
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  background: #f8fafd !important;
+  font-family: var(--vis-font) !important;
+}
+
+body.cc-theme:has(.nf-visit-modern) .consult-modal-actions button[type="button"]:not(.btn-secondary) {
+  background: var(--vis-primary) !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+body.cc-theme:has(.nf-visit-modern) .consult-modal-actions .btn-secondary {
+  border: 1px solid var(--vis-border) !important;
+  border-radius: 10px !important;
+  color: var(--vis-muted) !important;
+  background: #fff !important;
+}
+
+@media (max-width: 768px) {
+  body.cc-theme .nf-visit-modern .cc-patient-header {
+    padding: 20px;
+  }
+
+  body.cc-theme .nf-visit-modern .cc-actions {
+    width: 100%;
+  }
+
+  body.cc-theme .nf-visit-modern .cc-btn {
+    flex: 1 1 auto;
+    min-width: calc(50% - 4px);
+  }
+}

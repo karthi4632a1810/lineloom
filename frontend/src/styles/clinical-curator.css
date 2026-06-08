@@ -2,15 +2,15 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
 :root {
-  --cc-primary: #2563eb;
-  --cc-primary-soft: #dbeafe;
+  --cc-primary: #5d87ff;
+  --cc-primary-soft: #ecf2ff;
   --cc-success: #16a34a;
   --cc-success-soft: #dcfce7;
   --cc-warning: #f59e0b;
   --cc-warning-soft: #fef3c7;
   --cc-danger: #dc2626;
   --cc-danger-soft: #fee2e2;
-  --cc-bg: #f8fafc;
+  --cc-bg: #fafaf8;
   --cc-card: #ffffff;
   --cc-border: #e2e8f0;
   --cc-border-strong: #cbd5e1;
@@ -96,7 +96,7 @@ body.cc-theme {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--cc-primary), #1d4ed8);
+  background: linear-gradient(135deg, var(--cc-primary), #49beff);
   color: #fff;
   display: flex;
   align-items: center;
@@ -916,7 +916,7 @@ body.cc-theme .cc-app-main textarea:focus {
   box-shadow: 0 0 0 3px var(--cc-primary-soft);
 }
 
-body.cc-theme .cc-app-main button:not(.cc-btn):not(.cc-nav-link):not(.login-password-toggle):not(.login-submit) {
+body.cc-theme .cc-app-main button:not(.cc-btn):not(.cc-nav-link):not(.login-password-toggle):not(.login-submit):not(.nf-row-action):not(.nf-lq-btn):not(.patient-records-cell-link) {
   border: none;
   border-radius: var(--cc-radius-sm);
   background: var(--cc-primary);
@@ -929,7 +929,7 @@ body.cc-theme .cc-app-main button:not(.cc-btn):not(.cc-nav-link):not(.login-pass
   transition: background 0.15s, transform 0.1s;
 }
 
-body.cc-theme .cc-app-main button:not(.cc-btn):not(.cc-nav-link):hover:not(:disabled) {
+body.cc-theme .cc-app-main button:not(.cc-btn):not(.cc-nav-link):not(.nf-row-action):not(.nf-lq-btn):not(.patient-records-cell-link):hover:not(:disabled) {
   background: #1d4ed8;
 }
 

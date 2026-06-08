@@ -1,0 +1,587 @@
+/**
+ * Create Token — invoice-list style UI (visual only).
+ * Scoped to .nf-tc-invoice-ui on TokenCreationPage.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  --tc-inv-primary: #5d87ff;
+  --tc-inv-primary-soft: #ecf2ff;
+  --tc-inv-primary-hover: #4570ea;
+  --tc-inv-success: #49beff;
+  --tc-inv-success-soft: #ecf2ff;
+  --tc-inv-warning-soft: #fef5e5;
+  --tc-inv-warning: #ffae1f;
+  --tc-inv-danger-soft: #fdede8;
+  --tc-inv-danger: #fa896b;
+  --tc-inv-page: #f6f9fc;
+  --tc-inv-card: #ffffff;
+  --tc-inv-border: #ebf1f6;
+  --tc-inv-text: #2a3547;
+  --tc-inv-muted: #7c8fac;
+  --tc-inv-font: "Plus Jakarta Sans", "DM Sans", sans-serif;
+  --tc-inv-mono: "Space Mono", monospace;
+}
+
+body.cc-theme:has(.nf-tc-invoice-ui) {
+  font-family: var(--tc-inv-font);
+}
+
+body.cc-theme:has(.nf-tc-invoice-ui) .cc-app-main {
+  background: var(--tc-inv-page) !important;
+  padding: 24px 28px 32px !important;
+}
+
+body.cc-theme:has(.nf-tc-invoice-ui) .cc-topbar-title {
+  visibility: hidden;
+}
+
+/* —— Page shell —— */
+body.cc-theme .nf-tc-invoice-ui {
+  max-width: none !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui > * + * {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  border-top: none !important;
+}
+
+/* —— Gradient banner —— */
+body.cc-theme .nf-tc-invoice-ui .cc-page-header {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: linear-gradient(135deg, #ecf2ff 0%, #e8f4fd 45%, #eef6ff 100%);
+  border: 1px solid #dce7f7;
+  border-radius: 16px;
+  padding: 28px 32px;
+  margin: 0 0 24px !important;
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+body.cc-theme .nf-tc-invoice-ui .cc-page-header::before {
+  content: "";
+  position: absolute;
+  right: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(93, 135, 255, 0.35), rgba(93, 135, 255, 0.05) 70%);
+  pointer-events: none;
+}
+
+body.cc-theme .nf-tc-invoice-ui .cc-page-header::after {
+  content: "";
+  position: absolute;
+  right: 120px;
+  top: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #5d87ff, #49beff);
+  opacity: 0.85;
+  transform: rotate(12deg);
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(93, 135, 255, 0.25);
+}
+
+body.cc-theme .nf-tc-invoice-ui .cc-page-title {
+  margin: 0 !important;
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  color: var(--tc-inv-text) !important;
+  font-family: var(--tc-inv-font) !important;
+  text-transform: capitalize;
+}
+
+body.cc-theme .nf-tc-invoice-ui .cc-page-header > div::after {
+  content: "Overview · Create Token";
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tc-inv-muted);
+  font-family: var(--tc-inv-font);
+}
+
+body.cc-theme .nf-tc-invoice-ui .cc-page-lead {
+  display: none !important;
+}
+
+/* —— Unified data card (search + table) —— */
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-toolbar {
+  max-width: none !important;
+  margin: 0 !important;
+  width: 100% !important;
+  background: var(--tc-inv-card) !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  border-radius: 16px 16px 0 0 !important;
+  border-bottom: none !important;
+  box-shadow: 0 2px 12px rgba(93, 135, 255, 0.06) !important;
+  padding: 0 !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 0;
+  border-bottom: 1px solid var(--tc-inv-border);
+  margin-bottom: 0;
+  padding-bottom: 16px;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-card-head-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tc-inv-text);
+  letter-spacing: -0.01em;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-card-head-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tc-inv-muted);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-tab--active {
+  background: var(--tc-inv-primary-soft);
+  color: var(--tc-inv-primary);
+  border-color: #d6e4ff;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(93, 135, 255, 0.12);
+  color: var(--tc-inv-primary);
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-tab--active .nf-tc-invoice-tab-badge {
+  background: var(--tc-inv-primary);
+  color: #fff;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-toolbar-fields--token-create {
+  grid-template-columns: 1.4fr 1.2fr 0.9fr 0.9fr auto !important;
+  align-items: end;
+  gap: 12px 16px !important;
+  padding: 20px 24px !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-field label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: var(--tc-inv-muted) !important;
+  margin-bottom: 8px !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-input {
+  background: var(--tc-inv-card) !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+  font-family: var(--tc-inv-font) !important;
+  color: var(--tc-inv-text) !important;
+  padding: 11px 14px !important;
+  box-shadow: 0 1px 2px rgba(42, 53, 71, 0.04);
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-field:first-child .nf-lq-input {
+  padding-left: 40px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: 14px center !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-input:focus {
+  border-color: var(--tc-inv-primary) !important;
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.15) !important;
+  outline: none !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-btn--primary {
+  background: var(--tc-inv-primary) !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  padding: 11px 22px !important;
+  min-width: 110px;
+  box-shadow: 0 4px 12px rgba(93, 135, 255, 0.35) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-lq-btn--primary:hover:not(:disabled) {
+  background: var(--tc-inv-primary-hover) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .error-text {
+  margin: 0 !important;
+  padding: 10px 24px !important;
+  background: var(--tc-inv-card) !important;
+  border-left: 1px solid var(--tc-inv-border) !important;
+  border-right: 1px solid var(--tc-inv-border) !important;
+  color: #e53935 !important;
+  font-size: 13px !important;
+}
+
+/* —— Table card —— */
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-table-card {
+  position: static !important;
+  background: var(--tc-inv-card) !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  border-top: none !important;
+  border-radius: 0 0 16px 16px !important;
+  box-shadow: 0 8px 24px rgba(93, 135, 255, 0.08) !important;
+  padding: 0 0 8px !important;
+  margin: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table-wrap {
+  margin-top: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  overflow: auto;
+  max-height: min(520px, 58vh);
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table-wrap::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table-wrap::-webkit-scrollbar-thumb {
+  background: #d0dae8;
+  border-radius: 999px;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--tc-inv-font);
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table th {
+  background: #f8fafc !important;
+  border: none !important;
+  border-bottom: 1px solid var(--tc-inv-border) !important;
+  padding: 14px 16px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  color: var(--tc-inv-muted) !important;
+  white-space: nowrap;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table td {
+  border: none !important;
+  border-bottom: 1px solid #f2f6fa !important;
+  padding: 14px 16px !important;
+  font-size: 13px !important;
+  color: var(--tc-inv-text) !important;
+  vertical-align: middle !important;
+  white-space: nowrap;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr:hover td {
+  background: #fafbfd !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:first-child {
+  font-family: var(--tc-inv-mono);
+  font-size: 12px;
+  color: var(--tc-inv-muted);
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(2),
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(4),
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(6) {
+  font-family: var(--tc-inv-mono);
+  font-size: 12px;
+  color: var(--tc-inv-muted);
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(7) {
+  font-weight: 600;
+  color: var(--tc-inv-text);
+}
+
+/* Status / type pills */
+body.cc-theme .nf-tc-invoice-ui .visit-type-pill[data-type="OP"],
+body.cc-theme .nf-tc-invoice-ui .visit-type-pill:not([data-type="IP"]) {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  background: var(--tc-inv-primary-soft) !important;
+  color: var(--tc-inv-primary) !important;
+  border: none !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .visit-type-pill[data-type="IP"] {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  background: var(--tc-inv-success-soft) !important;
+  color: #4570ea !important;
+  border: none !important;
+}
+
+/* Sex chips */
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(9) {
+  font-weight: 700;
+  font-size: 11px !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-search-table tbody tr td:nth-child(9):has(:not(:empty)) {
+  /* fallback for browsers without :has on text nodes */
+}
+
+/* Header filter selects → pill tabs */
+body.cc-theme .nf-tc-invoice-ui .token-type-filter-head select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--tc-inv-border) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: var(--tc-inv-text) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 24px 6px 10px !important;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-type-filter-head select:focus {
+  border-color: var(--tc-inv-primary) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(93, 135, 255, 0.15);
+}
+
+/* Create Token row action */
+body.cc-theme .nf-tc-invoice-ui .nf-tc-token-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: var(--tc-inv-primary) !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  font-family: var(--tc-inv-font) !important;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(93, 135, 255, 0.3);
+  white-space: nowrap;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-token-btn::before {
+  content: "+";
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-token-btn:hover {
+  background: var(--tc-inv-primary-hover) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .muted-hint {
+  padding: 32px 16px !important;
+  text-align: center;
+  color: var(--tc-inv-muted) !important;
+  font-size: 14px !important;
+}
+
+/* Table footer bar (decorative pagination row) */
+body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-table-card::after {
+  content: "";
+  display: block;
+  height: 48px;
+  border-top: 1px solid var(--tc-inv-border);
+  margin: 0 24px;
+  background: linear-gradient(to bottom, #fafbfd, transparent);
+  pointer-events: none;
+}
+
+/* —— Modal —— */
+body.cc-theme .nf-tc-invoice-ui .nf-tc-modal-overlay {
+  background: rgba(42, 53, 71, 0.35) !important;
+  backdrop-filter: blur(4px);
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-modal {
+  background: var(--tc-inv-card) !important;
+  border-radius: 16px !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  box-shadow: 0 24px 48px rgba(42, 53, 71, 0.18) !important;
+  padding: 28px !important;
+  max-width: 440px !important;
+  width: calc(100% - 32px) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-header h3 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: var(--tc-inv-text) !important;
+  font-family: var(--tc-inv-font) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-subtitle {
+  color: var(--tc-inv-muted) !important;
+  font-size: 13px !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-form label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--tc-inv-muted) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-form select,
+body.cc-theme .nf-tc-invoice-ui .token-readonly-input {
+  border: 1px solid var(--tc-inv-border) !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+  font-family: var(--tc-inv-font) !important;
+  font-size: 14px !important;
+  padding: 10px 12px !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-readonly-input {
+  font-family: var(--tc-inv-mono) !important;
+  font-size: 12px !important;
+  color: var(--tc-inv-muted) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-actions button[type="submit"] {
+  background: var(--tc-inv-primary) !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  padding: 10px 18px !important;
+  box-shadow: 0 4px 12px rgba(93, 135, 255, 0.3);
+}
+
+body.cc-theme .nf-tc-invoice-ui .token-modal-actions .btn-secondary {
+  background: #fff !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  color: var(--tc-inv-muted) !important;
+  border-radius: 10px !important;
+  padding: 10px 18px !important;
+}
+
+/* Success toast */
+body.cc-theme .nf-tc-invoice-ui > .card:not(.nf-tc-invoice-table-card) {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 80;
+  margin: 0 !important;
+  background: var(--tc-inv-card) !important;
+  border: 1px solid var(--tc-inv-border) !important;
+  border-left: 4px solid var(--tc-inv-success) !important;
+  border-radius: 12px !important;
+  padding: 14px 18px !important;
+  box-shadow: 0 8px 24px rgba(42, 53, 71, 0.12) !important;
+  min-width: 260px;
+}
+
+body.cc-theme .nf-tc-invoice-ui > .card:not(.nf-tc-invoice-table-card) h4 {
+  margin: 0 0 6px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--tc-inv-text) !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui > .card:not(.nf-tc-invoice-table-card) p {
+  margin: 2px 0 !important;
+  font-size: 13px !important;
+  color: var(--tc-inv-muted) !important;
+}
+
+@media (max-width: 1100px) {
+  body.cc-theme .nf-tc-invoice-ui .nf-lq-toolbar-fields--token-create {
+    grid-template-columns: repeat(2, minmax(140px, 1fr)) !important;
+  }
+
+  body.cc-theme .nf-tc-invoice-ui .nf-lq-field--action {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 768px) {
+  body.cc-theme .nf-tc-invoice-ui .cc-page-header {
+    padding: 20px;
+    min-height: 100px;
+  }
+
+  body.cc-theme .nf-tc-invoice-ui .cc-page-header::before,
+  body.cc-theme .nf-tc-invoice-ui .cc-page-header::after {
+    opacity: 0.4;
+  }
+
+  body.cc-theme .nf-tc-invoice-ui .nf-tc-invoice-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

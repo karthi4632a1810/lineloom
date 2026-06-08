@@ -2,15 +2,15 @@
   box-sizing: border-box;
 }
 
-/* Design tokens (stich ai — Clinical Curator) */
+/* Design tokens — NexaFlow */
 :root {
-  --surface: #f7f9fb;
-  --surface-container-low: #f2f4f6;
+  --surface: #fafaf8;
+  --surface-container-low: #f5f5f4;
   --surface-container-lowest: #ffffff;
-  --on-surface: #191c1e;
-  --on-surface-variant: #434654;
-  --primary: #003d9b;
-  --primary-container: #0052cc;
+  --on-surface: #111827;
+  --on-surface-variant: #6b7280;
+  --primary: #0f766e;
+  --primary-container: #14b8a6;
   --font-display: "Manrope", "Poppins", "Segoe UI", system-ui, sans-serif;
   --font-body: "Inter", "Poppins", "Segoe UI", system-ui, sans-serif;
 }
@@ -652,6 +652,10 @@ tr.clickable-row {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px 18px;
   align-items: end;
+  margin-bottom: 0;
+}
+
+.token-search-filters.token-search-card:not(.token-create-search) .token-search-fields {
   margin-bottom: 14px;
 }
 

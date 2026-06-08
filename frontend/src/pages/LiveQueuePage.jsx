@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
+import { QueuePatientCard } from "../components/queue/QueuePatientCard.jsx";
 import { RevertConfirmModal } from "../components/RevertConfirmModal";
 import { fetchActiveDepartments } from "../services/departmentService";
 import { canRevertVisit } from "../utils/revertAnchors";
@@ -15,20 +16,14 @@ import {
   revertTokenRequest
 } from "../services/tokenService";
 import { resolveEffectiveTreatmentStart } from "../utils/tatSegments";
-import { tokenDetailPath } from "../utils/tokenPaths.js";
+import { goToTokenDetail } from "../utils/tokenPaths.js";
 
-const formatDateTime = (value = null) => {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-  return date.toLocaleString();
-};
-
-const normalizeTokenId = (value = "") => String(value ?? "").replace(/^\/+|\/+$/g, "");
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "WAITING", label: "Waiting" },
+  { value: "CONSULTING", label: "Consulting" },
+  { value: "IN_TREATMENT", label: "In treatment" }
+];
 
 export const LiveQueuePage = () => {
   const navigate = useNavigate();
@@ -36,6 +31,8 @@ export const LiveQueuePage = () => {
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [appliedDepartment, setAppliedDepartment] = useState("General Medicine");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [appliedStatus, setAppliedStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState("");
@@ -195,9 +192,17 @@ export const LiveQueuePage = () => {
     loadQueue();
   }, [loadQueue]);
 
+  const visibleRows = useMemo(() => {
+    if (!appliedStatus) {
+      return rows;
+    }
+    return rows.filter((row) => String(row.status ?? "").toUpperCase() === appliedStatus);
+  }, [rows, appliedStatus]);
+
   const handleApplySearch = (event) => {
     event.preventDefault();
     setAppliedSearch(searchInput.trim());
+    setAppliedStatus(statusFilter);
   };
 
   const openConsultStartModal = (row = null) => {
@@ -300,229 +305,145 @@ export const LiveQueuePage = () => {
   };
 
   return (
-    <section className="page cc-page live-queue-page">
+    <section className="page cc-page queue-layout-page live-queue-page nf-lq-modern">
       <ClinicalPageHeader
         title="Live queue"
         subtitle="All open tokens (not completed). Search by name, phone, reg no, OP/IP visit number, or token id."
       />
 
-      <form className="card filter-grid live-queue-filters" onSubmit={handleApplySearch}>
-        <input
-          type="search"
-          name="search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Name, phone, reg no, OP/IP visit no, token id…"
-          className="live-queue-search"
-        />
-        <select
-          name="department_filter"
-          value={appliedDepartment}
-          onChange={(event) => setAppliedDepartment(event.target.value)}
-        >
-          <option value="">All departments</option>
-          {consultDepartmentOptions.map((department) => (
-            <option key={department} value={department}>
-              {department}
-            </option>
-          ))}
-        </select>
-        <button type="submit" disabled={isSubmitting}>
-          Search
-        </button>
+      <div className="nf-stat-grid nf-lq-modern-stats" aria-label="Live queue summary">
+        <article className="summary-card nf-stat-card nf-stat-card--waiting">
+          <h4>Waiting</h4>
+          <p className="nf-stat-value">
+            {visibleRows.filter((row) => String(row.status ?? "").toUpperCase() === "WAITING").length}
+          </p>
+          <span className="nf-stat-caption">in queue</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--consult">
+          <h4>Consulting</h4>
+          <p className="nf-stat-value">
+            {visibleRows.filter((row) => String(row.status ?? "").toUpperCase() === "CONSULTING").length}
+          </p>
+          <span className="nf-stat-caption">active</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--treatment">
+          <h4>In treatment</h4>
+          <p className="nf-stat-value">
+            {visibleRows.filter((row) => String(row.status ?? "").toUpperCase() === "IN_TREATMENT").length}
+          </p>
+          <span className="nf-stat-caption">on-site</span>
+        </article>
+        <article className="summary-card nf-stat-card nf-stat-card--total">
+          <h4>Active tokens</h4>
+          <p className="nf-stat-value">{visibleRows.length}</p>
+          <span className="nf-stat-caption">total shown</span>
+        </article>
+      </div>
+
+      <form className="nf-lq-toolbar nf-lq-modern-toolbar" onSubmit={handleApplySearch}>
+        <div className="nf-panel-head">
+          <h2 className="nf-panel-title">Find patients</h2>
+          <p className="nf-panel-sub">Filter by search, department, or status (waiting, consulting, in treatment).</p>
+        </div>
+        <div className="nf-lq-toolbar-fields nf-lq-toolbar-fields--live">
+          <div className="nf-lq-field">
+            <label htmlFor="lq_search">Search</label>
+            <input
+              id="lq_search"
+              type="search"
+              name="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Name, phone, reg no, visit no, token id…"
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="lq_dept">Department</label>
+            <select
+              id="lq_dept"
+              name="department_filter"
+              value={appliedDepartment}
+              onChange={(event) => setAppliedDepartment(event.target.value)}
+              className="nf-lq-input"
+            >
+              <option value="">All departments</option>
+              {consultDepartmentOptions.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="lq_status">Status</label>
+            <select
+              id="lq_status"
+              name="status_filter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="nf-lq-input"
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="nf-lq-toolbar-actions">
+          <button type="submit" className="nf-lq-btn nf-lq-btn--primary" disabled={isSubmitting}>
+            {isSubmitting ? "Searching…" : "Apply filters"}
+          </button>
+        </div>
       </form>
 
       {error ? <p className="error-text">{error}</p> : null}
       {requestError ? <p className="error-text">{requestError}</p> : null}
-      {isLoading ? <p>Loading live queue…</p> : null}
+      {isLoading ? <p className="muted-inline">Loading live queue…</p> : null}
 
-      {!isLoading && !error && !rows.length ? (
-        <p>
-          {appliedSearch || appliedDepartment
-            ? "No tokens match your current search/filter."
+      {!isLoading && !error && !visibleRows.length ? (
+        <p className="muted-inline">
+          {appliedSearch || appliedDepartment || appliedStatus
+            ? "No tokens match your current filters."
             : "No active tokens in queue."}
         </p>
       ) : null}
 
-      {!isLoading && rows.length ? (
-        <article className="card table-card">
-          <table>
-            <thead>
-              <tr>
-                <th className="col-token-no">Token #</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Department</th>
-                <th className="col-tat">Waiting TAT</th>
-                <th className="col-tat">Consult TAT</th>
-                <th className="col-tat">Treatment TAT</th>
-                <th className="col-tat">Overall TAT</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.token_id}
-                  className="clickable-row"
-                  onClick={() => {
-                    const cleanId = normalizeTokenId(row.token_id);
-                    if (!cleanId) {
-                      return;
-                    }
-                    navigate(tokenDetailPath(cleanId));
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      const cleanId = normalizeTokenId(row.token_id);
-                      if (!cleanId) {
-                        return;
-                      }
-                      navigate(tokenDetailPath(cleanId));
-                    }
-                  }}
-                >
-                  <td className="col-token-no">
-                    <span className="token-queue-no" title={`${row.department} queue number`}>
-                      #{row.department_queue_no ?? "—"}
-                    </span>
-                    <span className="token-queue-id" title={row.token_id}>
-                      {row.token_id}
-                    </span>
-                  </td>
-                  <td>{row.name}</td>
-                  <td>{row.phone || "—"}</td>
-                  <td>{row.department}</td>
-                  <td className="col-tat">{formatSeconds(getTatSeconds(row, "waiting"))}</td>
-                  <td className="col-tat">
-                    <div className="tat-cell">
-                      <strong>{formatSeconds(getTatSeconds(row, "consult"))}</strong>
-                      {row.consulting_tat_minutes != null ? (
-                        <div className="tat-hover">
-                          <span className="info-icon" title="Show consult start/end">
-                            i
-                          </span>
-                          <div className="tat-tooltip">
-                            <div>Start: {formatDateTime(row.consult_start)}</div>
-                            <div>End: {formatDateTime(row.consult_end)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="col-tat">
-                    <div className="tat-cell">
-                      <strong>{formatSeconds(getTatSeconds(row, "treatment"))}</strong>
-                      {row.treatment_tat_minutes != null ? (
-                        <div className="tat-hover">
-                          <span className="info-icon" title="Show treatment start/end">
-                            i
-                          </span>
-                          <div className="tat-tooltip">
-                            <div>Start: {formatDateTime(row.treatment_start)}</div>
-                            <div>End: {formatDateTime(row.treatment_end)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="col-tat">
-                    {formatSeconds(
-                      ["waiting", "consult", "lab_wait", "lab_test", "treatment"]
-                        .map((k) => getTatSeconds(row, k))
-                        .filter((v) => v != null)
-                        .reduce((sum, v) => sum + v, 0)
-                    )}
-                  </td>
-                  <td>
-                    <span className={`status-chip status-${String(row.status).toLowerCase()}`}>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td
-                    className="token-actions-cell"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <div className="action-group" onClick={(event) => event.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openConsultStartModal(row)}
-                        disabled={isSubmitting || row.status !== "WAITING"}
-                        title="Start Consulting"
-                        aria-label="Start Consulting"
-                      >
-                        <span className="action-icon">SC</span>
-                      </button>
-                      {row.status === "CONSULTING" && !row.consult_end ? (
-                        <button
-                          type="button"
-                          onClick={() => openConfirmAction(row.token_id, "end_consult")}
-                          disabled={isSubmitting}
-                          title="End Consulting"
-                          aria-label="End Consulting"
-                        >
-                          <span className="action-icon">EC</span>
-                        </button>
-                      ) : null}
-                      {row.status === "CONSULTING" && row.consult_end ? (
-                        <button
-                          type="button"
-                          onClick={() => openConfirmAction(row.token_id, "start_treatment")}
-                          disabled={isSubmitting}
-                          title="Start Treatment"
-                          aria-label="Start Treatment"
-                        >
-                          <span className="action-icon">ST</span>
-                        </button>
-                      ) : null}
-                      {row.status === "CONSULTING" && row.consult_end && !row.treatment_start ? (
-                        <button
-                          type="button"
-                          className="action-complete-visit"
-                          onClick={() => openConfirmAction(row.token_id, "complete_visit")}
-                          disabled={isSubmitting}
-                          title="Complete visit (consult only)"
-                          aria-label="Complete visit"
-                        >
-                          <span className="action-icon">CV</span>
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => openConfirmAction(row.token_id, "end_treatment")}
-                        disabled={isSubmitting || row.status !== "IN_TREATMENT"}
-                        title="End Treatment"
-                        aria-label="End Treatment"
-                      >
-                        <span className="action-icon">ET</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="action-back"
-                        onClick={() => openRevertModal(row)}
-                        disabled={
-                          isSubmitting ||
-                          row.status === "WAITING" ||
-                          !canRevertVisit(row)
-                        }
-                        title="Revert to an earlier journey step"
-                        aria-label="Revert to an earlier journey step"
-                      >
-                        <span className="action-icon" aria-hidden>
-                          ←
-                        </span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
+      {!isLoading && visibleRows.length ? (
+        <div className="nf-lq-modern-queue-panel">
+          <div className="nf-lq-list-head">
+            <div>
+              <h2>Active queue</h2>
+              <p>Click a card to open the full visit. Use actions for workflow steps.</p>
+            </div>
+            <p>
+              <strong>{visibleRows.length}</strong>
+              {rows.length !== visibleRows.length ? ` of ${rows.length}` : ""} token
+              {visibleRows.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="nf-lq-list">
+            {visibleRows.map((row) => (
+              <QueuePatientCard
+                key={row.token_id}
+                row={row}
+                isSubmitting={isSubmitting}
+                formatSeconds={formatSeconds}
+                getTatSeconds={getTatSeconds}
+                canRevert={canRevertVisit(row)}
+                onOpenDetail={(r) => goToTokenDetail(navigate, r.token_id)}
+                onStartConsult={openConsultStartModal}
+                onEndConsult={(r) => openConfirmAction(r.token_id, "end_consult")}
+                onStartTreatment={(r) => openConfirmAction(r.token_id, "start_treatment")}
+                onCompleteVisit={(r) => openConfirmAction(r.token_id, "complete_visit")}
+                onEndTreatment={(r) => openConfirmAction(r.token_id, "end_treatment")}
+                onRevert={openRevertModal}
+              />
+            ))}
+          </div>
+        </div>
       ) : null}
 
       <RevertConfirmModal

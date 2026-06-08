@@ -59,8 +59,8 @@ export const LoginPage = () => {
               />
               <defs>
                 <linearGradient id={brandGradId} x1="8" y1="4" x2="36" y2="36">
-                  <stop stopColor="#1d4ed8" />
-                  <stop offset="1" stopColor="#1e3a8a" />
+                  <stop stopColor="#0f766e" />
+                  <stop offset="1" stopColor="#14b8a6" />
                 </linearGradient>
               </defs>
             </svg>

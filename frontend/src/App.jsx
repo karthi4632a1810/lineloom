@@ -158,7 +158,7 @@ export default function App() {
 
           path="/intelligence"
 
-          element={<Navigate to="/department-analytics" replace />}
+          element={<Navigate to="/infographic" replace />}
 
         />
 
@@ -246,11 +246,19 @@ export default function App() {
 
           path="/department-analytics"
 
+          element={<Navigate to="/infographic" replace />}
+
+        />
+
+        <Route
+
+          path="/infographic"
+
           element={
 
             <ProtectedRoute>
 
-              <AppLayout title="Analytics">
+              <AppLayout title="Infographic">
 
                 <DepartmentAnalyticsPage />
 

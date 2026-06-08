@@ -1,37 +1,53 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ClinicalPageHeader } from "../components/clinical/PagePrimitives.jsx";
+import { InfographicChartGrid } from "../components/infographic/InfographicChartGrid.jsx";
 import { fetchDepartmentFunnel } from "../services/journeyService";
 import { fetchHisDepartments } from "../services/dashboardService";
 import { fetchAlertRecommendations } from "../services/alertService";
-import {
-  fetchIntelligenceSummary,
-  refreshModelVersionRequest
-} from "../services/intelligenceService";
+import { refreshModelVersionRequest } from "../services/intelligenceService";
 
-const todayRange = () => {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+const getTodayDateInputValue = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
+
 const toMinutes = (value = null) => (value == null ? "-" : `${value} min`);
 const toPercent = (value = null) => (value == null ? "-" : `${value}%`);
 
+/** Analytics dashboard — funnel, conversion, and department insights. */
 export const DepartmentAnalyticsPage = () => {
   const [funnel, setFunnel] = useState(null);
-  const [intelSummary, setIntelSummary] = useState(null);
   const [recommendations, setRecommendations] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshingModel, setRefreshingModel] = useState(false);
   const [department, setDepartment] = useState("");
   const [departments, setDepartments] = useState([]);
+  const [dateFrom, setDateFrom] = useState(() => getTodayDateInputValue());
+  const [dateTo, setDateTo] = useState(() => getTodayDateInputValue());
   const role = localStorage.getItem("auth_role") ?? "nurse";
 
   const { fromIso, toIso } = useMemo(() => {
-    const { start, end } = todayRange();
+    const start = new Date(`${dateFrom}T00:00:00`);
+    const end = new Date(`${dateTo}T23:59:59.999`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      const { start: s, end: e } = (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return { start: today, end: tomorrow };
+      })();
+      return { fromIso: s.toISOString(), toIso: e.toISOString() };
+    }
+    if (end < start) {
+      return { fromIso: start.toISOString(), toIso: start.toISOString() };
+    }
     return { fromIso: start.toISOString(), toIso: end.toISOString() };
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const completionRate = useMemo(() => {
     if (!funnel?.total_visits) {
@@ -69,18 +85,15 @@ export const DepartmentAnalyticsPage = () => {
       if (department) {
         params.department = department;
       }
-      const [funnelData, intelData, recData] = await Promise.all([
+      const [funnelData, recData] = await Promise.all([
         fetchDepartmentFunnel(params),
-        fetchIntelligenceSummary().catch(() => null),
         fetchAlertRecommendations().catch(() => null)
       ]);
       setFunnel(funnelData);
-      setIntelSummary(intelData);
       setRecommendations(recData);
     } catch (err) {
-      setError(err?.message ?? "Unable to load funnel");
+      setError(err?.message ?? "Unable to load dashboard");
       setFunnel(null);
-      setIntelSummary(null);
       setRecommendations(null);
     } finally {
       setLoading(false);
@@ -100,6 +113,11 @@ export const DepartmentAnalyticsPage = () => {
     }
   };
 
+  const handleApplyFilters = (event) => {
+    event.preventDefault();
+    load();
+  };
+
   useEffect(() => {
     fetchHisDepartments()
       .then((list) => setDepartments(Array.isArray(list) ? list : []))
@@ -110,62 +128,136 @@ export const DepartmentAnalyticsPage = () => {
     load();
   }, [load]);
 
+  const departmentOptions = useMemo(
+    () =>
+      departments
+        .map((d) => String(d?.dept_name ?? d?.department ?? "").trim())
+        .filter(Boolean),
+    [departments]
+  );
+
   return (
-    <section className="page cc-page">
-      <header className="page-header">
-        <div>
-          <h1>Department journey funnel</h1>
-          <p className="page-subtitle">
-            One-session analytics view: operational AI insights + department drill-downs.
-          </p>
+    <section className="page cc-page infographic-page nf-info-modern queue-layout-page">
+      <ClinicalPageHeader
+        title="Infographic"
+        subtitle="Visual charts for visit outcomes, funnel stages, departments, and wait times."
+      />
+
+      <form className="nf-lq-toolbar nf-info-modern-toolbar" onSubmit={handleApplyFilters}>
+        <div className="nf-panel-head">
+          <h2 className="nf-panel-title">Filters</h2>
+          <p className="nf-panel-sub">Date range and department for metrics below.</p>
         </div>
-        <div className="filter-row">
-          <label htmlFor="funnel_dept">
-            Department
+        <div className="nf-lq-toolbar-fields nf-lq-toolbar-fields--overview">
+          <div className="nf-lq-field">
+            <label htmlFor="dash_analytics_from">From</label>
+            <input
+              id="dash_analytics_from"
+              type="date"
+              name="date_from"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="dash_analytics_to">To</label>
+            <input
+              id="dash_analytics_to"
+              type="date"
+              name="date_to"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+              className="nf-lq-input"
+            />
+          </div>
+          <div className="nf-lq-field">
+            <label htmlFor="dash_analytics_dept">Department</label>
             <select
-              id="funnel_dept"
+              id="dash_analytics_dept"
+              name="department"
               value={department}
               onChange={(event) => setDepartment(event.target.value)}
+              className="nf-lq-input"
             >
               <option value="">All departments</option>
-              {departments.map((d) => {
-                const deptName = String(d?.dept_name ?? d?.department ?? "").trim();
-                if (!deptName) {
-                  return null;
-                }
-                return (
-                  <option key={d.dept_id ?? deptName} value={deptName}>
-                    {deptName}
-                  </option>
-                );
-              })}
+              {departmentOptions.map((deptName) => (
+                <option key={deptName} value={deptName}>
+                  {deptName}
+                </option>
+              ))}
             </select>
-          </label>
-          <button type="button" onClick={load} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
+          </div>
+        </div>
+        <div className="nf-lq-toolbar-actions">
+          <button type="submit" className="nf-lq-btn nf-lq-btn--primary" disabled={loading}>
+            {loading ? "Loading…" : "Apply filters"}
           </button>
           {role === "admin" ? (
             <button
               type="button"
+              className="nf-lq-btn"
               onClick={handleRefreshModel}
               disabled={refreshingModel || loading}
             >
-              {refreshingModel ? "Refreshing model…" : "Refresh model version"}
+              {refreshingModel ? "Refreshing model…" : "Refresh model"}
             </button>
           ) : null}
         </div>
-      </header>
+      </form>
 
       {error ? <p className="error-text">{error}</p> : null}
-
-      {loading && !funnel ? <p>Loading funnel…</p> : null}
+      {loading && !funnel ? <p className="muted-inline">Loading dashboard…</p> : null}
 
       {funnel ? (
         <>
+          <div className="nf-stat-grid summary-grid nf-info-modern-stats" aria-label="Visit summary">
+            <article className="summary-card nf-stat-card nf-stat-card--waiting">
+              <h4>Total visits</h4>
+              <p className="nf-stat-value">{funnel.total_visits ?? 0}</p>
+              <span className="nf-stat-caption">in selected range</span>
+            </article>
+            <article className="summary-card nf-stat-card nf-stat-card--consult">
+              <h4>Consult completed</h4>
+              <p className="nf-stat-value">{funnel.reached_consult_end ?? 0}</p>
+              <span className="nf-stat-caption">{consultRate}% of visits</span>
+            </article>
+            <article className="summary-card nf-stat-card nf-stat-card--treatment">
+              <h4>Lab touched</h4>
+              <p className="nf-stat-value">{funnel.touched_lab ?? 0}</p>
+              <span className="nf-stat-caption">{labRate}% of visits</span>
+            </article>
+            <article className="summary-card nf-stat-card nf-stat-card--done">
+              <h4>Completed</h4>
+              <p className="nf-stat-value">{funnel.completed_status ?? 0}</p>
+              <span className="nf-stat-caption">{completionRate}% completion</span>
+            </article>
+          </div>
+
+          <article className="nf-panel nf-dashboard-panel nf-infographic-panel nf-info-modern-charts">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">Infographic charts</h2>
+              <p className="nf-panel-sub">
+                Pie and bar views for completion, journey stages, departments, and bottlenecks.
+              </p>
+            </div>
+            <div className="nf-panel-body">
+              <InfographicChartGrid
+                funnel={funnel}
+                completionRate={completionRate}
+                consultRate={consultRate}
+                labRate={labRate}
+                treatmentRate={treatmentRate}
+              />
+            </div>
+          </article>
+
           {recommendations?.recommendations?.length ? (
-            <article className="card" style={{ marginBottom: 16 }}>
-              <h3>Operational recommendations</h3>
-              <ul className="recs-list">
+            <article className="nf-panel nf-dashboard-panel nf-info-modern-panel">
+              <div className="nf-panel-head">
+                <h2 className="nf-panel-title">Operational recommendations</h2>
+              </div>
+              <ul className="recs-list nf-panel-body">
                 {recommendations.recommendations.map((line, idx) => (
                   <li key={`combined-rec-${idx}`}>
                     <strong>{line.title}</strong>
@@ -176,108 +268,45 @@ export const DepartmentAnalyticsPage = () => {
             </article>
           ) : null}
 
-          <article className="card ai-principle-card">
-            <h3>AI insight: explainable causal ops</h3>
-            <p className="page-subtitle">
-              Every insight includes what changed, who contributed most, why, confidence, and recommended action.
-            </p>
-            <div className="ai-summary-grid">
-              <div className="ai-summary-item">
-                <span className="ai-key">What happened</span>
-                <strong>{funnel.ai_insight?.summary?.what_happened ?? "-"}</strong>
-              </div>
-              <div className="ai-summary-item">
-                <span className="ai-key">Top contributor</span>
-                <strong>{funnel.ai_insight?.summary?.who_contributed_most ?? "-"}</strong>
-              </div>
-              <div className="ai-summary-item">
-                <span className="ai-key">Root cause stage</span>
-                <strong>{funnel.ai_insight?.summary?.why ?? "-"}</strong>
-              </div>
-              <div className="ai-summary-item">
-                <span className="ai-key">Confidence</span>
-                <strong className={`confidence-chip ${funnel.ai_insight?.summary?.confidence ?? "low"}`}>
-                  {funnel.ai_insight?.summary?.confidence ?? "low"}
-                </strong>
-              </div>
+          <article className="nf-panel nf-dashboard-panel ai-principle-card nf-info-modern-panel">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">AI insight</h2>
+              <p className="nf-panel-sub">What changed, who contributed most, and recommended action.</p>
             </div>
-            <div className="ai-action-box">
-              <span className="ai-key">Recommended action</span>
-              <p>{funnel.ai_insight?.summary?.recommended_action ?? "-"}</p>
-            </div>
-          </article>
-
-          <div className="funnel-grid">
-            <article className="card funnel-card">
-              <p>Total visits (range)</p>
-              <h2>{funnel.total_visits}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Reached consult end</p>
-              <h2>{funnel.reached_consult_end}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Touched lab</p>
-              <h2>{funnel.touched_lab}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Touched treatment</p>
-              <h2>{funnel.touched_treatment}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Completed (status)</p>
-              <h2>{funnel.completed_status}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Long-wait share (&gt;30m)</p>
-              <h2>{toPercent(funnel.long_wait_share_pct ?? 0)}</h2>
-            </article>
-            <article className="card funnel-card">
-              <p>Global wait (avg / median)</p>
-              <h2>{toMinutes(funnel.avg_waiting_minutes_global)}</h2>
-              <small>{toMinutes(funnel.median_waiting_minutes_global)} median</small>
-            </article>
-          </div>
-
-          <article className="card infographic-section" style={{ marginTop: 16 }}>
-            <h3>Infographic snapshot</h3>
-            <div className="infographic-grid">
-              <div className="infographic-ring-card">
-                <p className="infographic-label">Completion rate</p>
-                <div
-                  className="completion-ring"
-                  style={{ "--pct": `${completionRate}%` }}
-                  aria-label={`Completion rate ${completionRate}%`}
-                >
-                  <span>{completionRate}%</span>
+            <div className="nf-panel-body">
+              <div className="ai-summary-grid">
+                <div className="ai-summary-item">
+                  <span className="ai-key">What happened</span>
+                  <strong>{funnel.ai_insight?.summary?.what_happened ?? "-"}</strong>
                 </div>
-                <small>{funnel.completed_status} of {funnel.total_visits} visits completed</small>
+                <div className="ai-summary-item">
+                  <span className="ai-key">Top contributor</span>
+                  <strong>{funnel.ai_insight?.summary?.who_contributed_most ?? "-"}</strong>
+                </div>
+                <div className="ai-summary-item">
+                  <span className="ai-key">Root cause stage</span>
+                  <strong>{funnel.ai_insight?.summary?.why ?? "-"}</strong>
+                </div>
+                <div className="ai-summary-item">
+                  <span className="ai-key">Confidence</span>
+                  <strong className={`confidence-chip ${funnel.ai_insight?.summary?.confidence ?? "low"}`}>
+                    {funnel.ai_insight?.summary?.confidence ?? "low"}
+                  </strong>
+                </div>
               </div>
-              <div className="infographic-bars-card">
-                <p className="infographic-label">Stage conversion</p>
-                <div className="stage-row">
-                  <span>Consult done</span>
-                  <div className="stage-track"><div className="stage-fill consult" style={{ width: `${consultRate}%` }} /></div>
-                  <strong>{consultRate}%</strong>
-                </div>
-                <div className="stage-row">
-                  <span>Lab touched</span>
-                  <div className="stage-track"><div className="stage-fill lab" style={{ width: `${labRate}%` }} /></div>
-                  <strong>{labRate}%</strong>
-                </div>
-                <div className="stage-row">
-                  <span>Treatment touched</span>
-                  <div className="stage-track"><div className="stage-fill treatment" style={{ width: `${treatmentRate}%` }} /></div>
-                  <strong>{treatmentRate}%</strong>
-                </div>
+              <div className="ai-action-box">
+                <span className="ai-key">Recommended action</span>
+                <p>{funnel.ai_insight?.summary?.recommended_action ?? "-"}</p>
               </div>
             </div>
           </article>
 
-          <article className="card" style={{ marginTop: 16 }}>
-            <h3>Department patient counts</h3>
-            <div className="table-card">
-              <table>
+          <article className="nf-panel nf-dashboard-panel nf-info-modern-panel">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">Department patient counts</h2>
+            </div>
+            <div className="nf-panel-body token-search-table-wrap">
+              <table className="token-search-table nf-queue-table">
                 <thead>
                   <tr>
                     <th>Department</th>
@@ -296,10 +325,12 @@ export const DepartmentAnalyticsPage = () => {
             </div>
           </article>
 
-          <article className="card" style={{ marginTop: 16 }}>
-            <h3>Where patients spend most time</h3>
-            <div className="table-card">
-              <table>
+          <article className="nf-panel nf-dashboard-panel nf-info-modern-panel">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">Where patients spend most time</h2>
+            </div>
+            <div className="nf-panel-body token-search-table-wrap">
+              <table className="token-search-table nf-queue-table">
                 <thead>
                   <tr>
                     <th>Department</th>
@@ -328,10 +359,13 @@ export const DepartmentAnalyticsPage = () => {
             </div>
           </article>
 
-          <article className="card" style={{ marginTop: 16 }}>
-            <h3>Department contribution ranking (causal attribution)</h3>
-            <div className="table-card">
-              <table>
+          <article className="nf-panel nf-dashboard-panel nf-info-modern-panel">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">Department contribution ranking</h2>
+              <p className="nf-panel-sub">Causal attribution by department.</p>
+            </div>
+            <div className="nf-panel-body token-search-table-wrap">
+              <table className="token-search-table nf-queue-table">
                 <thead>
                   <tr>
                     <th>Department</th>
@@ -360,9 +394,11 @@ export const DepartmentAnalyticsPage = () => {
             </div>
           </article>
 
-          <article className="card" style={{ marginTop: 16 }}>
-            <h3>Department stage distribution (mini charts)</h3>
-            <div className="dept-mini-grid">
+          <article className="nf-panel nf-dashboard-panel nf-info-modern-panel">
+            <div className="nf-panel-head">
+              <h2 className="nf-panel-title">Department stage distribution</h2>
+            </div>
+            <div className="nf-panel-body dept-mini-grid">
               {(funnel.department_breakdown ?? []).map((row) => {
                 const total = Math.max(row.total_visits ?? 0, 1);
                 const wait = Math.max(0, total - (row.reached_consult_end ?? 0));
@@ -383,9 +419,18 @@ export const DepartmentAnalyticsPage = () => {
                       <div className="mini-seg treatment" style={{ width: `${treatPct}%` }} />
                     </div>
                     <div className="mini-legend">
-                      <span><i className="dot waiting" />Wait {waitPct}%</span>
-                      <span><i className="dot consulting" />Consult {consultPct}%</span>
-                      <span><i className="dot treatment" />Treat {treatPct}%</span>
+                      <span>
+                        <i className="dot waiting" />
+                        Wait {waitPct}%
+                      </span>
+                      <span>
+                        <i className="dot consulting" />
+                        Consult {consultPct}%
+                      </span>
+                      <span>
+                        <i className="dot treatment" />
+                        Treat {treatPct}%
+                      </span>
                     </div>
                   </article>
                 );

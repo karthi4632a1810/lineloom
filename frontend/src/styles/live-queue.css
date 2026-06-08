@@ -1,0 +1,338 @@
+/**
+ * Queue pages — shared card layout (Overview, Live Queue, Completed).
+ */
+
+body.cc-theme .queue-layout-page,
+body.cc-theme .live-queue-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1200px;
+}
+
+body.cc-theme .queue-layout-page > * + *,
+body.cc-theme .live-queue-page > * + * {
+  border-top: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Toolbar */
+body.cc-theme .nf-lq-toolbar {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .nf-lq-toolbar-fields {
+  display: grid;
+  grid-template-columns: 1fr minmax(200px, 280px);
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+body.cc-theme .nf-lq-toolbar-fields--overview {
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+}
+
+body.cc-theme .nf-lq-toolbar-fields--single {
+  grid-template-columns: 1fr;
+}
+
+body.cc-theme .nf-lq-toolbar-fields--live {
+  grid-template-columns: 1fr minmax(160px, 220px) minmax(140px, 160px);
+}
+
+@media (max-width: 900px) {
+  body.cc-theme .nf-lq-toolbar-fields--live {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Create token — fields + Search on one row */
+body.cc-theme .nf-lq-toolbar-fields--token-create {
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+  align-items: end;
+}
+
+body.cc-theme .nf-lq-field--action {
+  min-width: 120px;
+}
+
+body.cc-theme .nf-lq-field-action-label {
+  display: block;
+  visibility: hidden;
+  height: 17px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+body.cc-theme .token-create-page .token-create-search {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  body.cc-theme .nf-lq-toolbar-fields--token-create {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  body.cc-theme .nf-lq-toolbar-fields--token-create .nf-lq-field--action {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+body.cc-theme .nf-lq-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+body.cc-theme .nf-lq-status--completed {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+body.cc-theme .nf-lq-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 14px;
+  color: #111827;
+}
+
+body.cc-theme .nf-lq-input:focus {
+  outline: none;
+  border-color: #5d87ff;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+}
+
+body.cc-theme .nf-lq-toolbar-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 20px 16px;
+}
+
+body.cc-theme .nf-lq-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+}
+
+body.cc-theme .nf-lq-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+body.cc-theme .nf-lq-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+body.cc-theme .nf-lq-btn--primary {
+  background: #5d87ff;
+  border-color: #5d87ff;
+  color: #ffffff;
+}
+
+body.cc-theme .nf-lq-btn--primary:hover:not(:disabled) {
+  background: #4570ea;
+  border-color: #4570ea;
+}
+
+body.cc-theme .nf-lq-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #6b7280;
+}
+
+/* List header */
+body.cc-theme .nf-lq-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.cc-theme .nf-lq-list-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+body.cc-theme .nf-lq-list-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Card grid */
+body.cc-theme .nf-lq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.cc-theme .nf-lq-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+body.cc-theme .nf-lq-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+body.cc-theme .nf-lq-card-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+body.cc-theme .nf-lq-card-ident {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+body.cc-theme .nf-lq-queue-no {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #ecf2ff;
+  color: #5d87ff;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+body.cc-theme .nf-lq-name {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #111827;
+  text-decoration: none;
+  line-height: 1.3;
+}
+
+body.cc-theme .nf-lq-name:hover {
+  color: #5d87ff;
+}
+
+body.cc-theme .nf-lq-meta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+body.cc-theme .nf-lq-status {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+body.cc-theme .nf-lq-status--waiting {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+body.cc-theme .nf-lq-status--consulting {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+body.cc-theme .nf-lq-status--in-treatment {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #ddd6fe;
+}
+
+body.cc-theme .nf-lq-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 12px;
+}
+
+body.cc-theme .nf-lq-metric-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+body.cc-theme .nf-lq-metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+body.cc-theme .nf-lq-metric--emph .nf-lq-metric-value {
+  color: #5d87ff;
+}
+
+body.cc-theme .nf-lq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  body.cc-theme .nf-lq-toolbar-fields {
+    grid-template-columns: 1fr;
+  }
+
+  body.cc-theme .nf-lq-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.cc-theme .nf-lq-card-main {
+    flex-direction: column;
+  }
+}

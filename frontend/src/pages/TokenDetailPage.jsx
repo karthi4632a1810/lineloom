@@ -380,11 +380,8 @@ export const TokenDetailPage = () => {
     return (
       <div className="cc-detail">
         <div className="cc-patient-header">
-          <div className="cc-skeleton" style={{ width: 64, height: 64, borderRadius: 14 }} />
-          <div style={{ flex: 1 }}>
-            <div className="cc-skeleton" style={{ height: 28, width: "40%", marginBottom: 8 }} />
-            <div className="cc-skeleton" style={{ height: 14, width: "60%" }} />
-          </div>
+          <div className="cc-skeleton" style={{ height: 28, width: "40%", marginBottom: 8 }} />
+          <div className="cc-skeleton" style={{ height: 14, width: "60%" }} />
         </div>
         <div className="cc-kpi-row">
           {[1, 2, 3, 4].map((i) => (
@@ -634,11 +631,6 @@ export const TokenDetailPage = () => {
     }
   };
 
-  const hisRegHint =
-    token.patient_reg_no && token.patient_reg_no !== token.visit_id
-      ? `Patient reg ${token.patient_reg_no} · OP ${token.visit_id}`
-      : `OP reg ${token.visit_id || "—"}`;
-
   return (
     <>
       <ClinicalTokenDetailLayout
@@ -675,21 +667,14 @@ export const TokenDetailPage = () => {
         consultDurationLabel={consultDurationLabel}
         treatmentStartedAt={treatmentStartedAt}
         treatmentDurationLabel={treatmentDurationLabel}
-        pharmacyTotalSeconds={pharmacyTotalSeconds}
-        pharmacyHisTimes={pharmacyHisTimes}
         pharmacyLogs={pharmacyLogs}
-        labHisTimes={labHisTimes}
         labLogs={labLogs}
-        labTestSeconds={labTestSeconds}
-        inLabPath={inLabPath}
-        treatmentTotalSeconds={treatmentTotalSeconds}
         billingPayments={billingPayments}
         treatmentLogs={Array.isArray(tracking.treatment_logs) ? tracking.treatment_logs : []}
         treatmentLabelPayments={treatmentLabelPayments}
         patientJourneySteps={patientJourneySteps}
         formatDateTime={formatDateTime}
         formatSeconds={formatSeconds}
-        hisRegHint={hisRegHint}
       />
 
       {showConsultModal ? (

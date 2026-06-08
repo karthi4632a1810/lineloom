@@ -40,6 +40,55 @@ const segmentDurationMinutes = (start, end, useNowIfOpen) => {
   return Number((ms / 60000).toFixed(2));
 };
 
+/** Billing / pharmacy / lab TAT = gap from previous journey step end → this step start. */
+const TRANSITION_TAT_KINDS = new Set(["billing", "pharmacy", "lab"]);
+
+const stepStartMs = (step) => {
+  if (!step?.start) {
+    return null;
+  }
+  const ms = new Date(step.start).getTime();
+  return Number.isNaN(ms) ? null : ms;
+};
+
+const stepBoundaryMs = (step) => {
+  if (step?.end) {
+    const endMs = new Date(step.end).getTime();
+    if (!Number.isNaN(endMs)) {
+      return endMs;
+    }
+  }
+  return stepStartMs(step);
+};
+
+const applyTransitionTatToCandidates = (steps = []) => {
+  const sorted = [...steps].sort((a, b) => (stepStartMs(a) ?? 0) - (stepStartMs(b) ?? 0));
+  return sorted.map((step, index) => {
+    if (!TRANSITION_TAT_KINDS.has(step.kind)) {
+      return step;
+    }
+    const currentStartMs = stepStartMs(step);
+    if (currentStartMs == null) {
+      return step;
+    }
+    let previousEndMs = null;
+    for (let i = index - 1; i >= 0; i -= 1) {
+      previousEndMs = stepBoundaryMs(sorted[i]);
+      if (previousEndMs != null) {
+        break;
+      }
+    }
+    if (previousEndMs == null) {
+      return step;
+    }
+    const duration_minutes =
+      currentStartMs <= previousEndMs
+        ? 0
+        : Number(((currentStartMs - previousEndMs) / 60000).toFixed(2));
+    return { ...step, duration_minutes };
+  });
+};
+
 const getLogBounds = (logs = []) => {
   const entries = (Array.isArray(logs) ? logs : [])
     .map((row) => ({
@@ -141,22 +190,7 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
       in_progress: open
     });
   }
-  /** Lab queue is clinical only (billing is tracked separately, not on this timeline). */
-  const inLabPath =
-    Boolean(tracking.labs_ordered) || tracking.lab_start || tracking.lab_end;
   const labLogs = normalizeLabLogs(tracking.lab_logs);
-  const firstLabStart = labLogs[0]?.start ?? tracking.lab_start ?? null;
-  if (tracking.consult_end && inLabPath) {
-    const open = status === "CONSULTING" && !firstLabStart;
-    candidates.push({
-      kind: "lab_queue",
-      label: "Lab queue",
-      start: tracking.consult_end,
-      end: firstLabStart,
-      duration_minutes: metrics.lab_wait_tat_minutes,
-      in_progress: open
-    });
-  }
   if (labLogs.length) {
     labLogs.forEach((row, idx) => {
       const open = status === "CONSULTING" && !row.end;
@@ -183,19 +217,6 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
   }
 
   const pharmacyLogs = normalizePharmacyLogs(tracking.pharmacy_logs);
-  if (tracking.consult_end && pharmacyLogs.length) {
-    const firstBill = pharmacyLogs[0]?.start;
-    if (firstBill && firstBill.getTime() > new Date(tracking.consult_end).getTime()) {
-      candidates.push({
-        kind: "pharmacy_queue",
-        label: "Pharmacy queue",
-        start: tracking.consult_end,
-        end: firstBill,
-        duration_minutes: segmentDurationMinutes(tracking.consult_end, firstBill, false),
-        in_progress: false
-      });
-    }
-  }
   if (pharmacyLogs.length) {
     pharmacyLogs.forEach((row, idx) => {
       const open = status === "CONSULTING" && !row.end;
@@ -304,7 +325,8 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
     });
   }
 
-  const timeline = candidates
+  const ordered = applyTransitionTatToCandidates(candidates);
+  const timeline = ordered
     .map((row, index) => ({
       id: `${row.kind}-${index}`,
       kind: row.kind,
@@ -313,12 +335,7 @@ export const buildJourneyTimeline = (tracking = {}, token = {}) => {
       end: toIso(row.end),
       duration_minutes: row.duration_minutes,
       in_progress: Boolean(row.in_progress)
-    }))
-    .sort((a, b) => {
-      const ta = a.start ? new Date(a.start).getTime() : 0;
-      const tb = b.start ? new Date(b.start).getTime() : 0;
-      return ta - tb;
-    });
+    }));
 
   return {
     token_id: token.token_id,

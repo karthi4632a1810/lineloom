@@ -1,0 +1,1113 @@
+/**
+ * NexaFlow flat layout — open surfaces, no boxed fields/meta chips.
+ * Visual only; does not change behavior.
+ */
+
+/* —— Global: softer surfaces (app shell only) —— */
+body.cc-theme .cc-main .cc-card,
+body.cc-theme .cc-main .card:not(.nf-panel):not(.nf-stat-card):not(.summary-card),
+body.cc-theme .cc-page .cc-card,
+body.cc-theme .cc-page .card:not(.nf-panel):not(.nf-stat-card):not(.summary-card):not(.filter-grid):not(.token-search-card):not(.nf-pr-panel),
+body.cc-theme .page.cc-page .card:not(.nf-panel):not(.nf-stat-card):not(.summary-card),
+body.cc-theme .token-search-card,
+body.cc-theme .token-search-results-card,
+body.cc-theme .patient-records-mongo-card,
+body.cc-theme .patient-records-history-card,
+body.cc-theme .patient-records-detail-card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+body.cc-theme .cc-card:hover,
+body.cc-theme .card:hover,
+body.cc-theme .table-card:hover {
+  box-shadow: none;
+}
+
+/* Page sections separated by spacing + hairline dividers */
+body.cc-theme .cc-page > * + *,
+body.cc-theme .page.cc-page > * + *,
+body.cc-theme .patient-records-page > * + * {
+  padding-top: 24px;
+  margin-top: 24px;
+  border-top: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .cc-page-header,
+body.cc-theme .page-header,
+body.cc-theme .cc-page > .cc-page-header,
+body.cc-theme .page.cc-page > .cc-page-header {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* —— Search / filters: single toolbar row, no field boxes —— */
+body.cc-theme .token-search-card,
+body.cc-theme .filter-grid.card {
+  background: var(--nf-surface);
+  border: 1px solid var(--nf-border-subtle) !important;
+  border-radius: var(--nf-radius-md) !important;
+  padding: 16px 20px !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+}
+
+body.cc-theme .token-search-fields,
+body.cc-theme .token-search-filters .token-search-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin-bottom: 0;
+}
+
+body.cc-theme .token-search-field {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 220px;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+/* Labels live in placeholders — no boxed caption row */
+body.cc-theme .token-search-field > span {
+  display: none;
+}
+
+body.cc-theme .filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border-subtle) !important;
+  border-radius: var(--nf-radius-md) !important;
+  padding: 14px 18px !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+}
+
+body.cc-theme .filter-grid input,
+body.cc-theme .filter-grid select {
+  flex: 1 1 160px;
+  min-width: 140px;
+  border: none;
+  border-bottom: 1px solid var(--nf-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+body.cc-theme .filter-grid button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+body.cc-theme .token-search-field input {
+  border: none;
+  border-bottom: 1px solid var(--nf-border);
+  border-radius: 0;
+  padding: 8px 2px;
+  background: transparent;
+}
+
+body.cc-theme .token-search-field input:focus {
+  border-bottom-color: var(--nf-primary);
+  box-shadow: none;
+}
+
+body.cc-theme .token-search-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* Patient records summary — compact inline */
+body.cc-theme .patient-records-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  padding: 20px 0;
+  border-top: none;
+}
+
+body.cc-theme .patient-records-summary-grid .summary-card {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-width: 120px;
+  position: static;
+}
+
+body.cc-theme .patient-records-summary-grid .summary-card::before {
+  display: none !important;
+}
+
+/* Overview stat cards */
+body.cc-theme .nf-overview-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+body.cc-theme .nf-overview-page > * + * {
+  border-top: none !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+body.cc-theme .nf-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  body.cc-theme .nf-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  body.cc-theme .nf-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+body.cc-theme .nf-stat-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-md) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+  padding: 18px 20px 16px !important;
+  min-height: 108px;
+}
+
+body.cc-theme .nf-stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--nf-stat-accent, var(--nf-primary));
+}
+
+body.cc-theme .nf-stat-card--waiting {
+  --nf-stat-accent: #d97706;
+}
+
+body.cc-theme .nf-stat-card--consult {
+  --nf-stat-accent: #5d87ff;
+}
+
+body.cc-theme .nf-stat-card--treatment {
+  --nf-stat-accent: #7c3aed;
+}
+
+body.cc-theme .nf-stat-card--done {
+  --nf-stat-accent: #5d87ff;
+}
+
+body.cc-theme .nf-stat-card h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .nf-stat-value {
+  margin: 10px 0 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--nf-text);
+}
+
+body.cc-theme .nf-stat-caption {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--nf-text-subtle);
+}
+
+/* Panels — filters & queue table */
+body.cc-theme .nf-panel {
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-md) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+}
+
+body.cc-theme .nf-filters {
+  padding: 16px 18px !important;
+}
+
+body.cc-theme .nf-filters input,
+body.cc-theme .nf-filters select {
+  border: 1px solid var(--nf-border);
+  border-radius: var(--nf-radius-sm);
+  padding: 10px 12px;
+  background: var(--nf-bg);
+}
+
+body.cc-theme .nf-filters input:focus,
+body.cc-theme .nf-filters select:focus {
+  border-color: var(--nf-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--nf-primary-soft);
+}
+
+body.cc-theme .nf-queue-panel {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .nf-panel-head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .nf-panel-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--nf-text);
+}
+
+body.cc-theme .nf-panel-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .nf-dashboard-panel {
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-md) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .nf-panel-body {
+  padding: 16px 20px 20px;
+}
+
+body.cc-theme .infographic-page .recs-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+body.cc-theme .nf-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+body.cc-theme .nf-queue-table thead {
+  background: #f9fafb;
+}
+
+body.cc-theme .nf-overview-page .nf-queue-table tbody tr td {
+  background: #ffffff;
+}
+
+body.cc-theme .nf-overview-page .nf-queue-table tbody tr:hover td {
+  background: #f9fafb !important;
+}
+
+body.cc-theme .nf-queue-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--nf-text-muted);
+  border-bottom: 1px solid var(--nf-border);
+}
+
+body.cc-theme .nf-queue-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--nf-border-subtle);
+  vertical-align: middle;
+}
+
+body.cc-theme .nf-queue-table tbody tr.clickable-row,
+body.cc-theme .nf-queue-table tbody tr.nf-clickable-row {
+  cursor: pointer;
+}
+
+body.cc-theme .nf-row-view-link {
+  color: var(--nf-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+body.cc-theme .nf-row-view-link:hover {
+  text-decoration: underline;
+  color: var(--nf-primary-hover);
+}
+
+body.cc-theme .nf-row-view-link--name {
+  color: var(--nf-text);
+}
+
+body.cc-theme .nf-row-view-link--name:hover {
+  color: var(--nf-primary);
+}
+
+body.cc-theme a.nf-row-action {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+body.cc-theme .nf-row-action--view {
+  background: var(--nf-primary);
+  border-color: var(--nf-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+body.cc-theme .nf-row-action--view:hover {
+  background: var(--nf-primary-hover);
+  border-color: var(--nf-primary-hover);
+  color: #fff;
+}
+
+/* Patient Records — clickable search & visit rows */
+body.cc-theme .patient-records-page .patient-records-clickable-row {
+  cursor: pointer;
+}
+
+body.cc-theme .patient-records-page .patient-records-clickable-row:hover td {
+  background: var(--nf-primary-soft);
+}
+
+body.cc-theme .patient-records-cell-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--nf-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+body.cc-theme .patient-records-cell-link:hover {
+  text-decoration: underline;
+  color: var(--nf-primary-hover);
+}
+
+body.cc-theme .patient-records-cell-link--name {
+  color: var(--nf-text);
+  font-weight: 600;
+}
+
+body.cc-theme .patient-records-cell-link--name:hover {
+  color: var(--nf-primary);
+}
+
+body.cc-theme .patient-records-page .patient-records-search-table td button.patient-records-link {
+  min-height: 32px;
+}
+
+body.cc-theme .patient-records-link--secondary {
+  background: var(--nf-surface);
+  color: var(--nf-primary);
+  border: 1px solid var(--nf-border);
+}
+
+body.cc-theme .patient-records-layout .patient-records-detail-card {
+  border: 1px solid var(--nf-border) !important;
+  background: var(--nf-surface) !important;
+  padding: 20px !important;
+  border-radius: var(--nf-radius-md) !important;
+  position: sticky;
+  top: 88px;
+}
+
+body.cc-theme .patient-records-detail-stats .card {
+  background: var(--nf-bg) !important;
+  border: 1px solid var(--nf-border-subtle) !important;
+  border-radius: var(--nf-radius-sm) !important;
+  padding: 12px 14px !important;
+  box-shadow: none !important;
+}
+
+body.cc-theme .patient-records-detail-anchor {
+  scroll-margin-top: 88px;
+  height: 0;
+}
+
+/* Patient Records — proper cards (override global flat strip) */
+body.cc-theme .patient-records-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1500px;
+}
+
+body.cc-theme .patient-records-page .nf-pr-back-bar {
+  margin-bottom: 4px;
+}
+
+body.cc-theme .patient-records-header-panel {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .patient-records-header-panel .patient-records-header {
+  padding: 20px 20px 16px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .patient-records-header-panel .patient-records-summary-grid {
+  padding: 16px 20px 20px;
+  margin: 0;
+}
+
+body.cc-theme .patient-records-page > * + * {
+  border-top: none !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+body.cc-theme .patient-records-page .nf-pr-panel {
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-md) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.cc-theme .patient-records-page .patient-records-search-card {
+  display: flex;
+  flex-direction: column;
+}
+
+body.cc-theme .patient-records-page .nf-pr-fields {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 0 20px 16px;
+  align-items: end;
+}
+
+body.cc-theme .patient-records-page .token-search-field {
+  flex: none !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+body.cc-theme .patient-records-page .token-search-field > span {
+  display: block !important;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nf-text-muted);
+  margin-bottom: 6px;
+}
+
+body.cc-theme .patient-records-page .token-search-field input {
+  width: 100%;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-sm) !important;
+  padding: 10px 12px !important;
+  background: var(--nf-bg) !important;
+  font-size: 14px;
+}
+
+body.cc-theme .patient-records-page .token-search-field input:focus {
+  border-color: var(--nf-primary) !important;
+  box-shadow: 0 0 0 2px var(--nf-primary-soft) !important;
+  outline: none;
+}
+
+body.cc-theme .patient-records-page .nf-pr-actions {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 0 !important;
+  padding: 16px 20px;
+  border-top: 1px solid var(--nf-border-subtle);
+  background: var(--nf-bg);
+}
+
+body.cc-theme .patient-records-page .patient-records-search-results .token-search-table-wrap {
+  padding: 0 20px 20px;
+}
+
+body.cc-theme .patient-records-page .patient-records-search-results .muted-inline {
+  padding: 0 20px 20px;
+}
+
+body.cc-theme .patient-records-page .patient-records-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding: 0;
+  margin: 16px 0 20px;
+}
+
+body.cc-theme .patient-records-page .patient-records-summary-grid .nf-stat-card {
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+  padding: 18px 20px !important;
+  min-height: 100px;
+}
+
+body.cc-theme .patient-records-page .patient-records-mongo-card,
+body.cc-theme .patient-records-page .patient-records-history-card {
+  background: var(--nf-surface) !important;
+  border: 1px solid var(--nf-border) !important;
+  border-radius: var(--nf-radius-md) !important;
+  box-shadow: var(--nf-shadow-xs) !important;
+  padding: 20px !important;
+}
+
+@media (max-width: 900px) {
+  body.cc-theme .patient-records-page .patient-records-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+body.cc-theme .nf-queue-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Patient header meta — plain text row, no chips/boxes */
+body.cc-theme .cc-patient-header {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 0 24px;
+  border-bottom: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .cc-patient-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .cc-patient-meta-item {
+  background: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+body.cc-theme .cc-patient-meta-item::after {
+  content: "·";
+  margin-left: 20px;
+  color: var(--nf-text-subtle);
+  font-weight: 400;
+}
+
+body.cc-theme .cc-patient-meta-item:last-child::after {
+  display: none;
+}
+
+body.cc-theme .cc-patient-meta-item strong {
+  color: var(--nf-text);
+  font-weight: 600;
+}
+
+body.cc-theme .patient-chip,
+body.cc-theme .patient-meta-id {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .patient-title-row h2 {
+  margin: 0;
+}
+
+body.cc-theme .patient-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+body.cc-theme .patient-meta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .patient-records-meta-card,
+body.cc-theme .nf-inline-stat {
+  min-width: auto;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+}
+
+body.cc-theme .patient-records-meta-card span,
+body.cc-theme .nf-inline-stat span {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .patient-records-meta-card strong,
+body.cc-theme .nf-inline-stat strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+body.cc-theme .patient-records-header-meta {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+}
+
+/* KPI — minimal tiles */
+body.cc-theme .cc-kpi-row {
+  gap: 16px;
+}
+
+body.cc-theme .cc-kpi {
+  background: var(--nf-surface);
+  border: 1px solid var(--nf-border-subtle);
+  box-shadow: none;
+  border-radius: var(--nf-radius-md);
+}
+
+body.cc-theme .cc-kpi::before {
+  display: none;
+}
+
+/* Workflow / detail panels */
+body.cc-theme .cc-workflow-grid .cc-workflow-card {
+  border: 1px solid var(--nf-border-subtle);
+  box-shadow: none;
+}
+
+/* Tables — clean, no cell boxes */
+body.cc-theme .token-search-table th,
+body.cc-theme .token-search-table td,
+body.cc-theme .table-card th,
+body.cc-theme .table-card td,
+body.cc-theme .patient-records-history-table th,
+body.cc-theme .patient-records-history-table td {
+  border: none;
+  border-bottom: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .token-search-table-wrap,
+body.cc-theme .table-card:not(.nf-queue-panel) {
+  border: 1px solid var(--nf-border-subtle);
+  border-radius: var(--nf-radius-md);
+  overflow: hidden;
+  background: var(--nf-surface);
+}
+
+body.cc-theme .table-card thead,
+body.cc-theme .token-search-table thead {
+  background: var(--nf-bg);
+}
+
+/* Insights / legends — flat bars */
+body.cc-theme .intel-strip,
+body.cc-theme .action-legend,
+body.cc-theme .alert-strip {
+  border: none;
+  background: var(--nf-primary-soft);
+  border-radius: var(--nf-radius-sm);
+  padding: 12px 16px;
+  box-shadow: none;
+}
+
+body.cc-theme .action-legend {
+  background: transparent;
+  padding: 0;
+}
+
+body.cc-theme .action-legend-body {
+  font-size: 13px;
+  color: var(--nf-text-muted);
+}
+
+/* Section titles */
+body.cc-theme .patient-records-section-head,
+body.cc-theme .token-search-results-card > .patient-records-section-head {
+  margin-bottom: 16px;
+}
+
+body.cc-theme .patient-records-search-results,
+body.cc-theme .token-search-results-card {
+  padding-top: 8px;
+}
+
+/* Detail sidebar — stacked sections, not nested cards */
+body.cc-theme .patient-records-detail-card article.card,
+body.cc-theme .patient-records-mongo-card {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 0 20px !important;
+  margin: 0 !important;
+  border-bottom: 1px solid var(--nf-border-subtle) !important;
+  border-radius: 0 !important;
+}
+
+body.cc-theme .patient-records-detail-card article.card:last-child {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+}
+
+body.cc-theme .patient-records-layout .patient-records-detail-card {
+  border: 1px solid var(--nf-border-subtle);
+  border-radius: var(--nf-radius-md);
+  background: var(--nf-surface);
+  padding: 20px;
+}
+
+/* Detail KV — no boxes */
+body.cc-theme .patient-records-kv div {
+  border-bottom: 1px solid var(--nf-border-subtle);
+  padding: 10px 0;
+}
+
+body.cc-theme .patient-records-kv dt {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Badges stay pill but lighter */
+body.cc-theme .cc-badge {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+/* Sidebar & shell unchanged structure */
+body.cc-theme .cc-sidebar {
+  border: 1px solid var(--nf-border-subtle);
+}
+
+body.cc-theme .cc-topbar {
+  border: 1px solid var(--nf-border-subtle);
+}
+
+/* Login */
+body.cc-theme .login-field label {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Search results header row */
+body.cc-theme .patient-records-search-card .page-subtitle {
+  margin-bottom: 0;
+}
+
+/* —— No initials / avatar boxes before names —— */
+body.cc-theme .cc-patient-avatar,
+body.cc-theme .patient-avatar {
+  display: none !important;
+}
+
+body.cc-theme .cc-patient-hero,
+body.cc-theme .patient-hero {
+  display: block;
+  gap: 0;
+}
+
+body.cc-theme .cc-patient-name,
+body.cc-theme .patient-title-row h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+body.cc-theme .detail-header,
+body.cc-theme .patient-records-header {
+  border-bottom: 1px solid var(--nf-border-subtle);
+  padding-bottom: 20px;
+  margin-bottom: 0;
+}
+
+/* Patient tags — inline text, not chips */
+body.cc-theme .patient-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--nf-text-muted);
+}
+
+body.cc-theme .patient-tags > span:not(.status-chip) {
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+body.cc-theme .patient-tags > span:not(.status-chip)::after {
+  content: "·";
+  margin-left: 16px;
+  color: var(--nf-text-subtle);
+}
+
+body.cc-theme .patient-tags > span:not(.status-chip):last-child::after {
+  display: none;
+}
+
+body.cc-theme .status-chip {
+  border: none;
+  background: var(--nf-primary-soft);
+  color: var(--nf-primary);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* KPI — hide decorative icon boxes */
+body.cc-theme .cc-kpi-icon {
+  display: none;
+}
+
+body.cc-theme .cc-kpi {
+  padding: 16px 18px;
+}
+
+body.cc-theme .cc-kpi-value {
+  font-size: 1.5rem;
+}
+
+/* Analytics / intelligence — flat funnel & dept tiles */
+body.cc-theme .funnel-card,
+body.cc-theme .dept-mini-card,
+body.cc-theme .ai-principle-card,
+body.cc-theme .intel-panel,
+body.cc-theme .cc-placeholder-card {
+  border: 1px solid var(--nf-border-subtle) !important;
+  box-shadow: none !important;
+  background: var(--nf-surface) !important;
+  border-radius: var(--nf-radius-md) !important;
+  padding: 18px 20px !important;
+}
+
+body.cc-theme .dept-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+body.cc-theme .infographic-section,
+body.cc-theme .cc-page .card:not(.table-card):not(.token-search-card):not(.filter-grid) {
+  border: 1px solid var(--nf-border-subtle) !important;
+  box-shadow: none !important;
+  background: var(--nf-surface) !important;
+  border-radius: var(--nf-radius-md) !important;
+}
+
+/* Workflow cards — light panels */
+body.cc-theme .cc-workflow-grid {
+  gap: 14px;
+}
+
+body.cc-theme .cc-workflow-card {
+  background: var(--nf-surface);
+  padding: 16px;
+}
+
+/* Page headers — consistent */
+body.cc-theme .cc-page-header,
+body.cc-theme .page-header {
+  border: none;
+  padding: 0 0 8px;
+  margin-bottom: 8px;
+}
+
+body.cc-theme .cc-page-title,
+body.cc-theme .page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body.cc-theme .cc-page-lead,
+body.cc-theme .page-subtitle {
+  font-size: 14px;
+  color: var(--nf-text-muted);
+  max-width: 52rem;
+}
+
+/* Login — clean card, no heavy chrome */
+body.cc-theme .login-card {
+  border: 1px solid var(--nf-border-subtle);
+  box-shadow: var(--nf-shadow-sm);
+}
+
+body.cc-theme .login-brand-mark svg rect {
+  rx: 10;
+}
+
+/* Queue rows */
+body.cc-theme .patient-row {
+  padding: 4px 0;
+}
+
+body.cc-theme .patient-row strong {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Modals */
+body.cc-theme .modal-card {
+  border: 1px solid var(--nf-border-subtle);
+  box-shadow: var(--nf-shadow-lg);
+}
+
+/* Journey timeline */
+body.cc-theme .journey-step,
+body.cc-theme .cc-journey-step {
+  border-left-color: var(--nf-primary);
+}
+
+/* Overview / queue tables — see .nf-queue-table above */
+
+body.cc-theme .col-token-no {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--nf-text);
+  white-space: nowrap;
+}
+
+body.cc-theme .col-patient-name {
+  font-weight: 600;
+}
+
+body.cc-theme .nf-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+body.cc-theme .cc-app-main button.nf-row-action {
+  padding: 5px 11px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.3 !important;
+  border-radius: 6px !important;
+  border: 1px solid #d1d5db !important;
+  background: #ffffff !important;
+  color: #374151 !important;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: none !important;
+}
+
+body.cc-theme .cc-app-main button.nf-row-action:hover:not(:disabled) {
+  background: #f9fafb !important;
+  border-color: #9ca3af !important;
+  color: #111827 !important;
+}
+
+body.cc-theme .nf-row-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+body.cc-theme .nf-row-action--muted {
+  color: var(--nf-text-muted);
+  background: transparent;
+}
+
+body.cc-theme .cc-app-main button.nf-row-action--primary {
+  background: var(--nf-primary) !important;
+  border-color: var(--nf-primary) !important;
+  color: #fff !important;
+}
+
+body.cc-theme .cc-app-main button.nf-row-action--primary:hover:not(:disabled) {
+  background: var(--nf-primary-hover) !important;
+}
+
+body.cc-theme .nf-overview-page .status-chip {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+body.cc-theme .nf-overview-page .status-waiting {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+body.cc-theme .nf-overview-page .status-consulting {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #dbeafe;
+}
+
+body.cc-theme .nf-overview-page .status-completed {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+body.cc-theme .token-actions-cell {
+  min-width: 200px;
+}
+
+body.cc-theme .status-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+body.cc-theme .info-icon {
+  display: none;
+}
+
+body.cc-theme .tat-cell strong {
+  font-weight: 500;
+}

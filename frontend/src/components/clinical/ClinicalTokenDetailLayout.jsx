@@ -1,12 +1,5 @@
 import { useMemo, useState } from "react";
 
-const workflowState = ({ hasData, inProgress, done }) => {
-  if (done) return "done";
-  if (inProgress) return "active";
-  if (hasData) return "active";
-  return "pending";
-};
-
 const LogTable = ({ title, columns, rows, emptyMessage, searchQuery = "" }) => {
   const filtered = useMemo(() => {
     const q = String(searchQuery).trim().toLowerCase();
@@ -80,32 +73,17 @@ export const ClinicalTokenDetailLayout = ({
   consultDurationLabel,
   treatmentStartedAt,
   treatmentDurationLabel,
-  pharmacyTotalSeconds,
-  pharmacyHisTimes = {},
   pharmacyLogs = [],
-  labHisTimes = {},
   labLogs = [],
-  labTestSeconds,
-  inLabPath = false,
-  treatmentTotalSeconds,
   billingPayments = [],
   patientJourneySteps = [],
   treatmentLogs = [],
   treatmentLabelPayments = [],
   formatDateTime = (v) => String(v ?? ""),
   formatSeconds = (v) => String(v ?? ""),
-  visitCompletedAtLabel = "--",
-  hisRegHint = ""
+  visitCompletedAtLabel = "--"
 }) => {
   const [logSearch, setLogSearch] = useState("");
-
-  const pharmDone = Boolean(pharmacyHisTimes.completedAt);
-  const pharmActive = Boolean(pharmacyHisTimes.billAt) && !pharmDone;
-  const labDone = Boolean(labHisTimes.completedAt);
-  const labActive =
-    Boolean(labHisTimes.sampleAt || labHisTimes.requestAt) && !labDone;
-  const treatmentDone = Boolean(tracking.care_end);
-  const treatmentActive = Boolean(tracking.care_start) && !treatmentDone;
 
   const pharmacyRows = [...pharmacyLogs].reverse().map((entry, idx) => ({
     _key: `p-${idx}-${entry?.bill_no || entry?.request_no || idx}`,
@@ -149,12 +127,9 @@ export const ClinicalTokenDetailLayout = ({
       : "Waiting for bill in HIS…";
 
   return (
-    <div className="cc-detail">
+    <div className="cc-detail nf-visit-modern">
       <header className="cc-patient-header">
         <div className="cc-patient-hero">
-          <div className="cc-patient-avatar" aria-hidden>
-            {(patient?.name ?? token.patient_id ?? "P").slice(0, 2).toUpperCase()}
-          </div>
           <div>
             <h1 className="cc-patient-name">{patient?.name ?? `Patient ${token.patient_id}`}</h1>
             <div className="cc-patient-meta-grid">
@@ -212,6 +187,12 @@ export const ClinicalTokenDetailLayout = ({
           >
             Complete visit
           </button>
+          <button type="button" className="cc-btn" onClick={onStartTreatment} disabled={!canStartTreatment || isActing}>
+            Start treatment
+          </button>
+          <button type="button" className="cc-btn" onClick={onEndTreatment} disabled={!canEndTreatment || isActing}>
+            End treatment
+          </button>
           <button
             type="button"
             className="cc-btn cc-btn--ghost"
@@ -262,141 +243,6 @@ export const ClinicalTokenDetailLayout = ({
 
       <div className="cc-grid-12">
         <div className="cc-col-8" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="cc-card">
-            <div className="cc-card-header">
-              <div>
-                <h2 className="cc-card-title">Post-consult workflow</h2>
-                <p className="cc-card-sub">HIS-synced pharmacy, lab, and on-site treatment</p>
-              </div>
-            </div>
-            <div className="cc-workflow-grid">
-              <article
-                className={`cc-workflow-card cc-workflow-card--${workflowState({
-                  hasData: pharmacyLogs.length > 0,
-                  inProgress: pharmActive,
-                  done: pharmDone
-                })}`}
-              >
-                <div className="cc-workflow-top">
-                  <h3 className="cc-workflow-name">Pharmacy (HIS)</h3>
-                  <span className="cc-workflow-status" style={{ background: "#fef3c7", color: "#b45309" }}>
-                    {pharmDone ? "Complete" : pharmActive ? "In progress" : "Pending"}
-                  </span>
-                </div>
-                <div className="cc-workflow-progress">
-                  <span style={{ width: pharmDone ? "100%" : pharmActive ? "60%" : "8%" }} />
-                </div>
-                <p className="cc-card-sub" style={{ marginBottom: 8 }}>
-                  {hisRegHint}
-                </p>
-                <dl className="cc-workflow-times">
-                  <div>
-                    <dt>Request</dt>
-                    <dd>{formatDateTime(pharmacyHisTimes.requestAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Bill</dt>
-                    <dd>{formatDateTime(pharmacyHisTimes.billAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Completed</dt>
-                    <dd>
-                      {pharmacyHisTimes.completedAt
-                        ? formatDateTime(pharmacyHisTimes.completedAt)
-                        : pharmacyHisTimes.billAt
-                          ? "In progress"
-                          : "—"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Duration</dt>
-                    <dd>{formatSeconds(pharmacyTotalSeconds)}</dd>
-                  </div>
-                </dl>
-              </article>
-
-              <article
-                className={`cc-workflow-card cc-workflow-card--${workflowState({
-                  hasData: labLogs.length > 0,
-                  inProgress: labActive,
-                  done: labDone
-                })}`}
-              >
-                <div className="cc-workflow-top">
-                  <h3 className="cc-workflow-name">Lab (HIS)</h3>
-                  <span className="cc-workflow-status" style={{ background: "#cffafe", color: "#0e7490" }}>
-                    {labDone ? "Complete" : labActive ? "In progress" : inLabPath ? "Expected" : "—"}
-                  </span>
-                </div>
-                <div className="cc-workflow-progress">
-                  <span style={{ width: labDone ? "100%" : labActive ? "50%" : "5%" }} />
-                </div>
-                <dl className="cc-workflow-times">
-                  <div>
-                    <dt>Request</dt>
-                    <dd>{formatDateTime(labHisTimes.requestAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Sample</dt>
-                    <dd>{formatDateTime(labHisTimes.sampleAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Completed</dt>
-                    <dd>{formatDateTime(labHisTimes.completedAt) || (labActive ? "In progress" : "—")}</dd>
-                  </div>
-                  <div>
-                    <dt>Test time</dt>
-                    <dd>{formatSeconds(labTestSeconds)}</dd>
-                  </div>
-                </dl>
-              </article>
-
-              <article
-                className={`cc-workflow-card cc-workflow-card--${workflowState({
-                  hasData: Boolean(tracking.care_start),
-                  inProgress: treatmentActive,
-                  done: treatmentDone
-                })}`}
-              >
-                <div className="cc-workflow-top">
-                  <h3 className="cc-workflow-name">Treatment</h3>
-                  <span className="cc-workflow-status" style={{ background: "#ede9fe", color: "#6d28d9" }}>
-                    {treatmentDone ? "Complete" : treatmentActive ? "Active" : "Idle"}
-                  </span>
-                </div>
-                <div className="cc-workflow-progress">
-                  <span
-                    style={{
-                      width: treatmentDone ? "100%" : treatmentActive ? "45%" : "0%"
-                    }}
-                  />
-                </div>
-                <dl className="cc-workflow-times">
-                  <div>
-                    <dt>Start</dt>
-                    <dd>{formatDateTime(tracking.care_start)}</dd>
-                  </div>
-                  <div>
-                    <dt>End</dt>
-                    <dd>{formatDateTime(tracking.care_end)}</dd>
-                  </div>
-                  <div>
-                    <dt>Elapsed</dt>
-                    <dd>{formatSeconds(treatmentTotalSeconds)}</dd>
-                  </div>
-                </dl>
-                <div className="cc-workflow-actions">
-                  <button type="button" className="cc-btn" onClick={onStartTreatment} disabled={!canStartTreatment || isActing}>
-                    Start
-                  </button>
-                  <button type="button" className="cc-btn" onClick={onEndTreatment} disabled={!canEndTreatment || isActing}>
-                    End
-                  </button>
-                </div>
-              </article>
-            </div>
-          </section>
-
           <section className="cc-card">
             <div className="cc-card-header">
               <div>

@@ -1,0 +1,175 @@
+/**
+ * App-wide blue primary — replaces teal/light-green accents with light blue.
+ * Loaded last so it wins over legacy theme tokens.
+ */
+
+body.cc-theme {
+  --cc-primary: #5d87ff;
+  --cc-primary-soft: #ecf2ff;
+  --nf-primary: #5d87ff;
+  --nf-primary-hover: #4570ea;
+  --nf-primary-soft: #ecf2ff;
+  --nf-primary-muted: #d6e4ff;
+  --ov-mod-teal: #49beff;
+  --ov-mod-teal-soft: #ecf2ff;
+  --vis-teal: #49beff;
+  --vis-teal-soft: #ecf2ff;
+  --tc-inv-success: #49beff;
+  --tc-inv-success-soft: #ecf2ff;
+}
+
+body.cc-theme .cc-sidebar-logo,
+body.cc-theme .cc-user-avatar,
+body.cc-theme .nf-shell-avatar {
+  background: linear-gradient(135deg, #5d87ff, #49beff) !important;
+}
+
+body.cc-theme .cc-nav-link.active {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+}
+
+body.cc-theme .cc-nav-link.active::before {
+  background: #5d87ff !important;
+}
+
+body.cc-theme .cc-patient-avatar {
+  background: linear-gradient(145deg, #5d87ff, #49beff) !important;
+}
+
+body.cc-theme .nf-lq-btn--primary {
+  background: #5d87ff !important;
+  border-color: #5d87ff !important;
+}
+
+body.cc-theme .nf-lq-btn--primary:hover:not(:disabled) {
+  background: #4570ea !important;
+  border-color: #4570ea !important;
+}
+
+body.cc-theme .nf-lq-queue-no {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+}
+
+body.cc-theme .nf-lq-name:hover {
+  color: #5d87ff !important;
+}
+
+body.cc-theme .nf-lq-metric--emph .nf-lq-metric-value {
+  color: #5d87ff !important;
+}
+
+body.cc-theme .nf-lq-input:focus {
+  border-color: #5d87ff !important;
+  box-shadow: 0 0 0 2px rgba(93, 135, 255, 0.15) !important;
+}
+
+/* Completed / success accents → blue */
+body.cc-theme .nf-cq-modern .nf-lq-list-head > p,
+body.cc-theme .nf-cq-modern .nf-lq-list-head > p strong,
+body.cc-theme .nf-cq-modern .nf-lq-queue-no,
+body.cc-theme .nf-cq-modern .nf-lq-status,
+body.cc-theme .nf-cq-modern .nf-lq-status--completed,
+body.cc-theme .nf-cq-modern .nf-lq-metric--emph .nf-lq-metric-value,
+body.cc-theme .nf-cq-modern .nf-lq-name:hover {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+  border-color: #d6e4ff !important;
+}
+
+body.cc-theme .nf-cq-modern .nf-lq-card:hover {
+  border-color: #d6e4ff !important;
+  box-shadow: 0 4px 16px rgba(93, 135, 255, 0.1) !important;
+  background: #fafbfd !important;
+}
+
+body.cc-theme .nf-cq-modern .cc-page-header::after {
+  background: linear-gradient(135deg, #5d87ff, #49beff) !important;
+  box-shadow: 0 10px 28px rgba(93, 135, 255, 0.28) !important;
+}
+
+/* Modernize gradient banners — vertically center title + breadcrumb */
+body.cc-theme .nf-overview-modern .cc-page-header,
+body.cc-theme .nf-lq-modern .cc-page-header,
+body.cc-theme .nf-cq-modern .cc-page-header,
+body.cc-theme .nf-pr-modern .cc-page-header,
+body.cc-theme .nf-info-modern .cc-page-header,
+body.cc-theme .nf-tc-invoice-ui .cc-page-header {
+  align-items: center !important;
+}
+
+body.cc-theme .nf-overview-modern .cc-page-header > div,
+body.cc-theme .nf-lq-modern .cc-page-header > div,
+body.cc-theme .nf-cq-modern .cc-page-header > div,
+body.cc-theme .nf-pr-modern .cc-page-header > div,
+body.cc-theme .nf-info-modern .cc-page-header > div,
+body.cc-theme .nf-tc-invoice-ui .cc-page-header > div,
+body.cc-theme .nf-overview-modern .cc-page-actions,
+body.cc-theme .nf-lq-modern .cc-page-actions,
+body.cc-theme .nf-cq-modern .cc-page-actions,
+body.cc-theme .nf-pr-modern .cc-page-actions,
+body.cc-theme .nf-info-modern .cc-page-actions,
+body.cc-theme .nf-tc-invoice-ui .cc-page-actions {
+  position: relative;
+  z-index: 1;
+}
+
+body.cc-theme .nf-overview-modern .cc-page-header::after,
+body.cc-theme .nf-lq-modern .cc-page-header::after,
+body.cc-theme .nf-cq-modern .cc-page-header::after,
+body.cc-theme .nf-pr-modern .cc-page-header::after,
+body.cc-theme .nf-info-modern .cc-page-header::after,
+body.cc-theme .nf-tc-invoice-ui .cc-page-header::after {
+  top: 50% !important;
+  transform: translateY(-50%) rotate(10deg) !important;
+}
+
+body.cc-theme .nf-overview-modern .nf-lq-status--completed,
+body.cc-theme .nf-lq-modern .nf-lq-status--completed {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+}
+
+body.cc-theme .nf-visit-modern .visit-type-pill[data-type="IP"],
+body.cc-theme .token-create-page .visit-type-pill[data-type="IP"],
+body.cc-theme .nf-tc-invoice-ui .visit-type-pill[data-type="IP"] {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+  border-color: #bfdbfe !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-badge--primary,
+body.cc-theme .nf-visit-modern .cc-journey-step.done .cc-journey-dot {
+  background: #ecf2ff !important;
+  color: #5d87ff !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.done .cc-journey-dot {
+  background: #49beff !important;
+  box-shadow: 0 0 0 2px rgba(73, 190, 255, 0.35) !important;
+  color: #fff !important;
+}
+
+body.cc-theme .nf-visit-modern .cc-journey-step.kind-pharmacy .cc-journey-dot {
+  background: #ffae1f !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-token-btn,
+body.cc-theme .token-create-page .nf-tc-token-btn {
+  color: #fff !important;
+  background: #5d87ff !important;
+  border: none !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui .nf-tc-token-btn:hover,
+body.cc-theme .token-create-page .nf-tc-token-btn:hover {
+  background: #4570ea !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+body.cc-theme .nf-tc-invoice-ui > .card:not(.nf-tc-invoice-table-card),
+body.cc-theme .token-create-page > .card:not(.token-search-results-card) {
+  border-left-color: #5d87ff !important;
+}

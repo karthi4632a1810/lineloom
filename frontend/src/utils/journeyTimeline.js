@@ -1,4 +1,3 @@
-import { resolveLabTimes } from "./labTimes.js";
 import { resolvePharmacyTimes } from "./pharmacyTimes.js";
 import { resolveVisitCompletedAt } from "./visitCompletion.js";
 
@@ -19,7 +18,47 @@ const segmentMinutes = (start, end, inProgress) => {
   if (endMs == null) {
     return null;
   }
-  return Number(((endMs - startMs) / 60000).toFixed(2));
+  return Number((Math.max(endMs - startMs, 0) / 60000).toFixed(2));
+};
+
+/** Billing / pharmacy / lab TAT = gap from previous journey step end → this step start. */
+const TRANSITION_TAT_KINDS = new Set(["billing", "pharmacy", "lab"]);
+
+const stepBoundaryMs = (step) => toMs(step?.end) ?? toMs(step?.start);
+
+const transitionMinutesFromPrevious = (previousEndMs, currentStartMs) => {
+  if (previousEndMs == null || currentStartMs == null) {
+    return null;
+  }
+  if (currentStartMs <= previousEndMs) {
+    return 0;
+  }
+  return Number(((currentStartMs - previousEndMs) / 60000).toFixed(2));
+};
+
+export const applyTransitionTatToSteps = (steps = []) => {
+  const sorted = [...steps].sort((a, b) => (toMs(a.start) ?? 0) - (toMs(b.start) ?? 0));
+  return sorted.map((step, index) => {
+    if (!TRANSITION_TAT_KINDS.has(step.kind)) {
+      return step;
+    }
+    const currentStartMs = toMs(step.start);
+    if (currentStartMs == null) {
+      return step;
+    }
+    let previousEndMs = null;
+    for (let i = index - 1; i >= 0; i -= 1) {
+      previousEndMs = stepBoundaryMs(sorted[i]);
+      if (previousEndMs != null) {
+        break;
+      }
+    }
+    const duration_minutes = transitionMinutesFromPrevious(previousEndMs, currentStartMs);
+    if (duration_minutes == null) {
+      return step;
+    }
+    return { ...step, duration_minutes };
+  });
 };
 
 const normalizePharmacyLog = (row = {}) => {
@@ -87,20 +126,6 @@ export const buildJourneyStepsFromTracking = (tracking = {}, token = {}) => {
     .filter(Boolean);
   const pharmacyTimes = resolvePharmacyTimes(tracking);
 
-  if (tracking.consult_end && pharmacyLogs.length && pharmacyTimes.billAt) {
-    const firstBillMs = Math.min(...pharmacyLogs.map((row) => toMs(row.start)).filter((ms) => ms != null));
-    if (firstBillMs > toMs(tracking.consult_end)) {
-      steps.push({
-        kind: "pharmacy_queue",
-        label: "Pharmacy queue",
-        start: tracking.consult_end,
-        end: new Date(firstBillMs),
-        duration_minutes: segmentMinutes(tracking.consult_end, new Date(firstBillMs), false),
-        in_progress: false
-      });
-    }
-  }
-
   if (pharmacyLogs.length) {
     pharmacyLogs.forEach((row, idx) => {
       const open = status === "CONSULTING" && !row.end;
@@ -133,36 +158,6 @@ export const buildJourneyStepsFromTracking = (tracking = {}, token = {}) => {
   const labLogs = (Array.isArray(tracking.lab_logs) ? tracking.lab_logs : [])
     .map(normalizeLabLog)
     .filter(Boolean);
-  const labTimes = resolveLabTimes(tracking);
-  const inLabPath =
-    Boolean(tracking.labs_ordered) ||
-    Boolean(tracking.lab_start) ||
-    Boolean(tracking.lab_end) ||
-    labLogs.length > 0;
-
-  if (tracking.consult_end && inLabPath) {
-    const firstLabMs =
-      labLogs.length > 0
-        ? Math.min(
-            ...labLogs.map((row) => toMs(row.start) ?? toMs(row.request_at)).filter((ms) => ms != null)
-          )
-        : toMs(tracking.lab_start);
-    if (!firstLabMs || firstLabMs > toMs(tracking.consult_end)) {
-      const open = status === "CONSULTING" && !firstLabMs;
-      steps.push({
-        kind: "lab_queue",
-        label: "Lab queue",
-        start: tracking.consult_end,
-        end: firstLabMs ? new Date(firstLabMs) : null,
-        duration_minutes: segmentMinutes(
-          tracking.consult_end,
-          firstLabMs ? new Date(firstLabMs) : null,
-          open
-        ),
-        in_progress: open
-      });
-    }
-  }
 
   if (labLogs.length) {
     labLogs.forEach((row, idx) => {
@@ -240,9 +235,9 @@ export const buildJourneyStepsFromTracking = (tracking = {}, token = {}) => {
     });
   }
 
-  return steps
-    .filter((row) => row.start || row.kind === "completed")
-    .sort((a, b) => (toMs(a.start) ?? 0) - (toMs(b.start) ?? 0));
+  return applyTransitionTatToSteps(
+    steps.filter((row) => row.start || row.kind === "completed")
+  );
 };
 
 export const mapJourneyStepForDisplay = (seg = {}, formatDateTime = (v) => String(v ?? "")) => ({

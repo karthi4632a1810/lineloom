@@ -1,0 +1,427 @@
+/**
+ * Infographic page — Modernize bento grid + chart styles.
+ */
+
+/* ── 12-column bento layout ── */
+body.cc-theme .nf-infographic-charts {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, auto);
+  gap: 18px;
+  align-items: stretch;
+}
+
+body.cc-theme .nf-chart-slot-hero {
+  grid-column: 1 / span 4;
+  grid-row: 1 / span 2;
+}
+
+body.cc-theme .nf-chart-slot-visit {
+  grid-column: 5 / span 4;
+  grid-row: 1;
+}
+
+body.cc-theme .nf-chart-slot-journey {
+  grid-column: 9 / span 4;
+  grid-row: 1;
+}
+
+body.cc-theme .nf-chart-slot-dept {
+  grid-column: 5 / span 4;
+  grid-row: 2;
+}
+
+body.cc-theme .nf-chart-slot-stage {
+  grid-column: 9 / span 4;
+  grid-row: 2;
+}
+
+body.cc-theme .nf-chart-slot-wait {
+  grid-column: 1 / span 6;
+  grid-row: 3;
+}
+
+body.cc-theme .nf-chart-slot-bottleneck {
+  grid-column: 7 / span 6;
+  grid-row: 3;
+}
+
+body.cc-theme .nf-infographic-bento:not(:has(.nf-chart-slot-bottleneck)) .nf-chart-slot-wait {
+  grid-column: 1 / -1;
+}
+
+/* ── Card shell ── */
+body.cc-theme .nf-chart-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+  border: 1px solid #ebf1f6;
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+  min-height: 0;
+  box-shadow: 0 4px 18px rgba(93, 135, 255, 0.06);
+}
+
+body.cc-theme .nf-chart-card--featured {
+  background: linear-gradient(180deg, #fff 0%, #fafcff 100%);
+}
+
+body.cc-theme .nf-chart-card-head {
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+body.cc-theme .nf-chart-heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #2a3547;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  line-height: 1.3;
+}
+
+body.cc-theme .nf-chart-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7c8fac;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  line-height: 1.35;
+}
+
+/* ── Pie / donut — stacked layout for equal cell fit ── */
+body.cc-theme .nf-chart-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+body.cc-theme .nf-chart-body--pie,
+body.cc-theme .nf-chart-body--donut {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+body.cc-theme .nf-chart-slot-hero .nf-chart-body--donut {
+  justify-content: center;
+  gap: 14px;
+}
+
+body.cc-theme .nf-chart-donut-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+body.cc-theme .nf-chart-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-align: center;
+  gap: 2px;
+}
+
+body.cc-theme .nf-chart-donut-center strong {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2a3547;
+  line-height: 1;
+  font-family: "Space Mono", monospace;
+}
+
+body.cc-theme .nf-chart-slot-hero .nf-chart-donut-center strong {
+  font-size: 30px;
+}
+
+body.cc-theme .nf-chart-donut-center span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c8fac;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+body.cc-theme .nf-chart-svg {
+  display: block;
+}
+
+body.cc-theme .nf-chart-svg--pie {
+  filter: drop-shadow(0 4px 12px rgba(93, 135, 255, 0.08));
+}
+
+body.cc-theme .nf-chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-size: 12px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+body.cc-theme .nf-chart-legend li {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 8px 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+body.cc-theme .nf-chart-legend li:last-child {
+  margin-bottom: 0;
+}
+
+body.cc-theme .nf-chart-legend-dot,
+body.cc-theme .nf-chart-legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+body.cc-theme .nf-chart-legend-label {
+  color: #5a6a85;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.cc-theme .nf-chart-legend-value {
+  color: #2a3547;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+}
+
+body.cc-theme .nf-chart-legend-value em {
+  font-style: normal;
+  font-weight: 500;
+  color: #7c8fac;
+  margin-left: 4px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 10px;
+}
+
+body.cc-theme .nf-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f8fafd;
+  color: #a8b5c9;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+body.cc-theme .nf-chart-empty--inline {
+  border-radius: 12px;
+  min-height: 100px;
+  width: 100%;
+  flex: 1;
+}
+
+/* ── Vertical bar charts — compact fixed height ── */
+body.cc-theme .nf-chart-card--bars {
+  justify-content: flex-start;
+}
+
+body.cc-theme .nf-vbar-chart {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+body.cc-theme .nf-vbar-chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22px;
+  bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.cc-theme .nf-vbar-chart-grid span {
+  display: block;
+  height: 1px;
+  background: #f2f6fa;
+}
+
+body.cc-theme .nf-vbar-chart-columns {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(6px, 2vw, 14px);
+  height: 148px;
+  position: relative;
+  z-index: 1;
+}
+
+body.cc-theme .nf-chart-slot-stage .nf-vbar-chart-columns {
+  height: 132px;
+}
+
+body.cc-theme .nf-vbar-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 56px;
+}
+
+body.cc-theme .nf-chart-slot-wait .nf-vbar-column,
+body.cc-theme .nf-chart-slot-bottleneck .nf-vbar-column {
+  max-width: 64px;
+}
+
+body.cc-theme .nf-vbar-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: #5d87ff;
+  font-family: "Space Mono", monospace;
+  margin-bottom: 6px;
+  min-height: 14px;
+  white-space: nowrap;
+}
+
+body.cc-theme .nf-vbar-track {
+  width: 100%;
+  max-width: 32px;
+  height: 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+body.cc-theme .nf-chart-slot-stage .nf-vbar-track {
+  height: 76px;
+  max-width: 36px;
+}
+
+body.cc-theme .nf-vbar-fill {
+  width: 100%;
+  min-height: 6px;
+  border-radius: 999px;
+  background: rgba(93, 135, 255, 0.28);
+  transition: height 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.cc-theme .nf-vbar-fill.is-highlight {
+  background: linear-gradient(180deg, #5d87ff 0%, #4570ea 100%);
+  box-shadow: 0 6px 16px rgba(93, 135, 255, 0.3);
+}
+
+body.cc-theme .nf-vbar-label {
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c8fac;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+/* ── Responsive bento ── */
+@media (max-width: 1200px) {
+  body.cc-theme .nf-infographic-charts {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  body.cc-theme .nf-chart-slot-hero {
+    grid-column: 1 / span 3;
+    grid-row: 1;
+  }
+
+  body.cc-theme .nf-chart-slot-visit {
+    grid-column: 4 / span 3;
+    grid-row: 1;
+  }
+
+  body.cc-theme .nf-chart-slot-journey {
+    grid-column: 1 / span 3;
+    grid-row: 2;
+  }
+
+  body.cc-theme .nf-chart-slot-dept {
+    grid-column: 4 / span 3;
+    grid-row: 2;
+  }
+
+  body.cc-theme .nf-chart-slot-stage {
+    grid-column: 1 / span 6;
+    grid-row: 3;
+  }
+
+  body.cc-theme .nf-chart-slot-wait {
+    grid-column: 1 / span 3;
+    grid-row: 4;
+  }
+
+  body.cc-theme .nf-chart-slot-bottleneck {
+    grid-column: 4 / span 3;
+    grid-row: 4;
+  }
+
+  body.cc-theme .nf-infographic-bento:not(:has(.nf-chart-slot-bottleneck)) .nf-chart-slot-wait {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+}
+
+@media (max-width: 768px) {
+  body.cc-theme .nf-infographic-charts {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  body.cc-theme .nf-chart-slot-hero,
+  body.cc-theme .nf-chart-slot-visit,
+  body.cc-theme .nf-chart-slot-journey,
+  body.cc-theme .nf-chart-slot-dept,
+  body.cc-theme .nf-chart-slot-stage,
+  body.cc-theme .nf-chart-slot-wait,
+  body.cc-theme .nf-chart-slot-bottleneck {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  body.cc-theme .nf-chart-slot-hero .nf-chart-body--donut {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  body.cc-theme .nf-vbar-chart-columns {
+    gap: 4px;
+  }
+
+  body.cc-theme .nf-vbar-column {
+    max-width: none;
+  }
+
+  body.cc-theme .nf-vbar-track {
+    max-width: 26px;
+  }
+}
